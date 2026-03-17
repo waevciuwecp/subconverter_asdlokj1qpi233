@@ -124,6 +124,22 @@ Finally subscribe this link in Clash and you are done!
 
 Please refer to [中文文档](https://github.com/asdlokj1qpi23/subconverter/blob/master/README-cn.md#%E8%BF%9B%E9%98%B6%E7%94%A8%E6%B3%95).
 
+### Clash Dialer / Providers
+
+For Clash/ClashR targets, the following advanced query parameters are available:
+
+- `use_dialer=true|false`: enable writing `dialer-proxy` for matched nodes.
+- `dialer_group_name=<name>`: dialer group name (default: `dialer`).
+- `apply_dialer_to=<regex>`: apply dialer only to node remarks matching this regex (empty = all nodes).
+- `proxy_providers=<urlencoded-json-array>`: inject Clash `proxy-providers` from request input.
+
+`custom_proxy_group` also supports provider-oriented types:
+
+- `select-use`
+- `url-test-use`
+- `fallback-use`
+- `load-balance-use` (supports optional trailing strategy, e.g. `` `round-robin` ``)
+
 ## Auto Upload
 
 > Upload Gist automatically
