@@ -311,11 +311,18 @@ void readGroup(YAML::Node node, string_array &dest, bool scope_limit = true)
         object["interval"] >>= interval;
         object["tolerance"] >>= tolerance;
         object["timeout"] >>= timeout;
-        for(std::size_t j = 0; j < object["rule"].size(); j++)
-            tempArray.emplace_back(safe_as<std::string>(object["rule"][j]));
+        YAML::Node rules_node = object["rule"];
+        if(!rules_node.IsDefined())
+            rules_node = object["proxies"];
+        if(rules_node.IsSequence())
+        {
+            for(std::size_t j = 0; j < rules_node.size(); j++)
+                tempArray.emplace_back(safe_as<std::string>(rules_node[j]));
+        }
         switch(hash_(type))
         {
         case "select"_hash:
+        case "relay"_hash:
             if(tempArray.size() < 3)
                 continue;
             break;
