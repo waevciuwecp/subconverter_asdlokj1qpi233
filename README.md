@@ -133,12 +133,22 @@ For Clash/ClashR targets, the following advanced query parameters are available:
 - `apply_dialer_to=<regex>`: apply dialer only to node remarks matching this regex (empty = all nodes).
 - `proxy_providers=<urlencoded-json-array>`: inject Clash `proxy-providers` from request input.
 
-`custom_proxy_group` also supports provider-oriented types:
+`custom_proxy_group` also supports:
 
-- `select-use`
-- `url-test-use`
-- `fallback-use`
-- `load-balance-use` (supports optional trailing strategy, e.g. `` `round-robin` ``)
+- `relay` (deprecated in some clients, but supported by this project)
+- provider-oriented types:
+  - `select-use`
+  - `url-test-use`
+  - `fallback-use`
+  - `load-balance-use` (supports optional trailing strategy, e.g. `` `round-robin` ``)
+
+Notes:
+
+- For `load-balance` / `load-balance-use`, strategy is checked. Valid values are `consistent-hashing` and `round-robin`. Invalid/unknown strategy falls back to `consistent-hashing`.
+- In external YAML/TOML group definitions, both `rule` and `proxies` are accepted as the list field for group members or provider-match rules.
+- Preset examples:
+  - `base/config/nodnsleak.dialer.ini`: dialer with both `dialer-select` and `dialer-lb`.
+  - `base/config/nodnsleak.dialer-non_lb.ini`: dialer without `dialer-lb` (select-only + `DIRECT` fallback).
 
 ## Auto Upload
 

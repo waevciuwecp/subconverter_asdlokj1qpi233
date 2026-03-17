@@ -343,7 +343,7 @@ http://127.0.0.1:25500/sub?target=%TARGET%&url=%URL%&emoji=%EMOJI%····
 | use_dialer    |  可选 | true / false              | 用于给匹配到的节点设置 Clash 的 `dialer-proxy` 字段。仅对 Clash / ClashR 目标生效，默认为 false。                                                                                                                              |
 | dialer_group_name | 可选 | dialer                    | 当 `use_dialer=true` 时使用的拨号组名，默认为 `dialer`。                                                                                                                                                                   |
 | apply_dialer_to | 可选 | awesome\|Scholar          | 当 `use_dialer=true` 时用于匹配节点名称的正则，命中的节点会写入 `dialer-proxy`。为空时表示应用到全部节点。                                                                                                                       |
-| proxy_providers | 可选 | %5B%7B%22name%22...%7D%5D | Clash `proxy-providers` 定义，内容为 URL 编码后的 JSON 数组（每项至少包含 `name` 与 `url`，可选 `type` `path` `interval`）。可与下方 `select-use` / `load-balance-use` 等策略组配合使用。                                      |
+| proxy_providers | 可选 | %5B%7B%22name%22...%7D%5D | Clash `proxy-providers` 定义，内容为 URL 编码后的 JSON 数组（每项至少包含 `name` 与 `url`，可选 `type` `path` `interval`）。也可在外部 YAML/TOML 配置中使用 `custom.proxy_providers` / `custom.proxy-providers`。可与下方 `select-use` / `load-balance-use` 等策略组配合使用。                                      |
 
 举个例子：
 
@@ -931,8 +931,8 @@ exclude=(流量|官网)
 
 ```ini
 custom_proxy_group=Group_Name`url-test|fallback|load-balance`Rule_1`Rule_2`...`test_url`interval[,timeout][,tolerance]
-custom_proxy_group=Group_Name`select`Rule_1`Rule_2`...
-custom_proxy_group=Group_Name`select-use|url-test-use|fallback-use|load-balance-use`Provider_Rule_1`Provider_Rule_2`...`test_url`interval[,timeout][,tolerance][`strategy]
+custom_proxy_group=Group_Name`select|relay`Rule_1`Rule_2`...
+custom_proxy_group=Group_Name`select-use|url-test-use|fallback-use|load-balance-use`Provider_Rule_1`Provider_Rule_2`...`test_url`interval[,timeout][,tolerance][`strategy`]
 # 格式示例
 custom_proxy_group=🍎 苹果服务`url-test`(美国|US)`http://www.gstatic.com/generate_204`300,5,100
 # 表示创建一个叫 🍎 苹果服务 的 url-test 策略组,并向其中添加名字含'美国','US'的节点，每隔300秒测试一次，测速超时为5s，切换节点的延迟容差为100ms
@@ -940,6 +940,8 @@ custom_proxy_group=🇯🇵 日本延迟最低`url-test`(日|JP)`http://www.gsta
 # 表示创建一个叫 🇯🇵 日本延迟最低 的 url-test 策略组,并向其中添加名字含'日','JP'的节点，每隔300秒测试一次，测速超时为5s
 custom_proxy_group=负载均衡`load-balance`.*`http://www.gstatic.com/generate_204`300,,100
 # 表示创建一个叫 负载均衡 的 load-balance 策略组,并向其中添加所有的节点，每隔300秒测试一次，切换节点的延迟容差为100ms
+custom_proxy_group=RelayChain`relay`香港`日本`[]DIRECT
+# 表示创建一个叫 RelayChain 的 relay 策略组，按顺序串联香港、日本节点，并添加 DIRECT 作为兜底
 custom_proxy_group=🇯🇵 JP`select`沪日`日本`[]🇯🇵 日本延迟最低
 # 表示创建一个叫 🇯🇵 JP 的 select 策略组,并向其中**依次**添加名字含'沪日','日本'的节点，以及引用上述所创建的 🇯🇵 日本延迟最低 策略组
 custom_proxy_group=节点选择`select`(^(?!.*(美国|日本)).*)
@@ -952,6 +954,10 @@ custom_proxy_group=dialer-lb`load-balance-use`(sub|dialer|relay)`http://www.gsta
 
 -   `select-use|url-test-use|fallback-use|load-balance-use` 是 provider 模式策略组：不从节点中筛选 `proxies`，而是按正则匹配 provider 名称并生成 `use` 列表。
 -   provider 名称来源于请求参数 `proxy_providers`（会写入 Clash 的 `proxy-providers`），以及 `!!PROVIDER=...` 显式指定的 provider 名称。
+-   `relay` 已支持（虽然在部分客户端中已废弃），可用于生成 Clash relay 组。
+-   `load-balance` / `load-balance-use` 的可选 `strategy` 会做校验，合法值为 `consistent-hashing` 和 `round-robin`；非法值会回退到 `consistent-hashing`。
+-   外部 YAML / TOML 配置中的策略组规则列表字段可写 `rule` 或 `proxies`（两者等价）。
+-   可参考 `base/config/nodnsleak.dialer.ini`（含 `dialer-lb`）与 `base/config/nodnsleak.dialer-non_lb.ini`（不含 `dialer-lb`）两个示例配置。
 
 -   还可使用一些特殊筛选条件：
 
@@ -1172,15 +1178,17 @@ emoji=阿根廷,🇦🇷
 
 ;用于自定义组的选项 会覆盖 主程序目录中的配置文件 里的内容
 ;使用以下模式生成 Clash 代理组，带有 "[]" 前缀将直接添加
-;Format: Group_Name`select`Rule_1`Rule_2`...
+;Format: Group_Name`select|relay`Rule_1`Rule_2`...
 ;        Group_Name`url-test|fallback|load-balance`Rule_1`Rule_2`...`test_url`interval[,timeout][,tolerance]
-;        Group_Name`select-use|url-test-use|fallback-use|load-balance-use`Provider_Rule_1`Provider_Rule_2`...`test_url`interval[,timeout][,tolerance][`strategy]
+;        Group_Name`select-use|url-test-use|fallback-use|load-balance-use`Provider_Rule_1`Provider_Rule_2`...`test_url`interval[,timeout][,tolerance][`strategy`]
+;        strategy (optional) supports: consistent-hashing, round-robin
 ;Rule with "[]" prefix will be added directly.
 
 custom_proxy_group=Proxy`select`.*`[]AUTO`[]DIRECT`.*
 custom_proxy_group=UrlTest`url-test`.*`http://www.gstatic.com/generate_204`300,5,100
 custom_proxy_group=FallBack`fallback`.*`http://www.gstatic.com/generate_204`300,5
 custom_proxy_group=LoadBalance`load-balance`.*`http://www.gstatic.com/generate_204`300,,100
+custom_proxy_group=RelayChain`relay`香港`日本`[]DIRECT
 custom_proxy_group=SSID`ssid`default_group`celluar=group0,ssid1=group1,ssid2=group2
 
 ;custom_proxy_group=g1`select`!!GROUPID=0

@@ -2,8 +2,22 @@ custom:
   enable_rule_generator: false
   overwrite_original_rules: false
 
+  # Dialer options (Clash / ClashR target)
+  # use_dialer: true
+  # dialer_group_name: dialer
+  # apply_dialer_to: "awesome|Scholar"
+  #
+  # Clash proxy-providers can be defined here (same as URL parameter `proxy_providers`)
+  # proxy_providers:
+  # - {name: sub-dialer-provider-1, type: http, url: https://example.com/sub.yaml}
+  # - {name: relay-provider-1, type: http, url: https://example.com/relay.yaml}
+
   proxy_groups:
   - {import: snippets/groups_forcerule.txt}
+  # `rule` and `proxies` are both accepted as the list field in YAML proxy groups.
+  # - {name: RelayChain, type: relay, proxies: [hop-1, hop-2]}
+  # - {name: DialerLB, type: load-balance-use, rule: ['(sub|dialer|relay)'], url: http://www.gstatic.com/generate_204, interval: 6537, tolerance: 100, strategy: round-robin}
+  #   strategy supports: consistent-hashing, round-robin (invalid values fallback to consistent-hashing)
 
 #  rulesets:
 #  - {import: snippets/ruleset_remote.txt}

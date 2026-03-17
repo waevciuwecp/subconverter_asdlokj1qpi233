@@ -3,6 +3,11 @@ version = 1
 enable_rule_generator = false
 overwrite_original_rules = false
 
+# Dialer options (Clash / ClashR target)
+#use_dialer = true
+#dialer_group_name = "dialer"
+#apply_dialer_to = "awesome|Scholar"
+
 # Options for custom base configuration file
 clash_rule_base = "base/forcerule.yml"
 #surge_rule_base = "base/surge.conf"
@@ -22,8 +27,31 @@ clash_rule_base = "base/forcerule.yml"
 #include_remarks = []
 #exclude_remarks = []
 
+#[[proxy_providers]]
+#name = "sub-dialer-provider-1"
+#type = "http"
+#url = "https://example.com/sub.yaml"
+
+#[[proxy_providers]]
+#name = "relay-provider-1"
+#type = "http"
+#url = "https://example.com/relay.yaml"
+
 [[custom_groups]]
 import = "snippets/groups_forcerule.toml"
+# `rule` and `proxies` are both accepted as the list field in TOML custom_groups.
+# type = "relay"
+# proxies = ["hop-1", "hop-2"]
+
+#[[custom_groups]]
+#name = "DialerLB"
+#type = "load-balance-use"
+#rule = ["(sub|dialer|relay)"]
+#url = "http://www.gstatic.com/generate_204"
+#interval = 6537
+#tolerance = 100
+#strategy = "round-robin"
+# strategy supports: consistent-hashing, round-robin (invalid values fallback to consistent-hashing)
 
 #[[rulesets]]
 #import = ""
