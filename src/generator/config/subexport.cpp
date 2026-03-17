@@ -188,6 +188,24 @@ void processRemark(std::string &remark, const string_array &remarks_list, bool p
     remark = tempRemark;
 }
 
+static string_array resolveUsingProviders(const ProxyGroupConfig &group, const extra_settings &ext)
+{
+    string_array providers = group.UsingProvider;
+    for(const std::string &rule : group.ProviderFilterRules)
+    {
+        for(const ClashProxyProviderConfig &provider : ext.clash_proxy_providers)
+        {
+            if(provider.Name.empty())
+                continue;
+            if(!regFind(provider.Name, rule))
+                continue;
+            if(std::find(providers.begin(), providers.end(), provider.Name) == providers.end())
+                providers.emplace_back(provider.Name);
+        }
+    }
+    return providers;
+}
+
 void
 groupGenerate(const std::string &rule, std::vector<Proxy> &nodelist, string_array &filtered_nodelist, bool add_direct,
               extra_settings &ext) {
@@ -701,6 +719,9 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 continue;
         }
 
+        if(!x.UnderlyingProxy.empty())
+            singleproxy["dialer-proxy"] = x.UnderlyingProxy;
+
         // UDP is not supported yet in clash using snell
         // sees in https://dreamacro.github.io/clash/configuration/outbound.html#snell
         if (udp && x.Type != ProxyType::Snell && x.Type != ProxyType::TUIC)
@@ -729,10 +750,30 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
     else
         yamlnode["Proxy"] = proxies;
 
+    if(!ext.clash_proxy_providers.empty())
+    {
+        YAML::Node providers;
+        for(const ClashProxyProviderConfig &provider : ext.clash_proxy_providers)
+        {
+            if(provider.Name.empty() || provider.Url.empty())
+                continue;
+            YAML::Node single_provider;
+            single_provider["type"] = provider.Type.empty() ? "http" : provider.Type;
+            single_provider["url"] = provider.Url;
+            single_provider["path"] = provider.Path;
+            if(provider.Interval > 0)
+                single_provider["interval"] = provider.Interval;
+            providers[provider.Name] = single_provider;
+        }
+        if(providers.size())
+            yamlnode["proxy-providers"] = providers;
+    }
+
 
     for (const ProxyGroupConfig &x: extra_proxy_group) {
         YAML::Node singlegroup;
         string_array filtered_nodelist;
+        string_array using_provider;
 
         singlegroup["name"] = x.Name;
         if (x.Type == ProxyGroupType::Smart)
@@ -769,8 +810,9 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
         for (const auto &y: x.Proxies)
             groupGenerate(y, nodelist, filtered_nodelist, true, ext);
 
-        if (!x.UsingProvider.empty())
-            singlegroup["use"] = x.UsingProvider;
+        using_provider = resolveUsingProviders(x, ext);
+        if (!using_provider.empty())
+            singlegroup["use"] = using_provider;
         else {
             if (filtered_nodelist.empty())
                 filtered_nodelist.emplace_back("DIRECT");

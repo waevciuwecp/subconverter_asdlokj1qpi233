@@ -2,6 +2,7 @@
 #include <string>
 #include <mutex>
 #include <numeric>
+#include <unordered_set>
 
 #include <inja.hpp>
 #include <yaml-cpp/yaml.h>
@@ -19,6 +20,7 @@
 #include "utils/ini_reader/ini_reader.h"
 #include "utils/logger.h"
 #include "utils/network.h"
+#include "utils/rapidjson_extra.h"
 #include "utils/regexp.h"
 #include "utils/stl_extra.h"
 #include "utils/string.h"
@@ -129,6 +131,65 @@ void matchUserAgent(const std::string &user_agent, std::string &target, tribool 
             return;
         }
     }
+}
+
+static std::string sanitizeProviderNameForPath(const std::string &name)
+{
+    std::string safe_name = regReplace(name, "[^A-Za-z0-9_.-]+", "_");
+    if(safe_name.empty())
+        return "provider";
+    return safe_name;
+}
+
+static bool parseProxyProviders(const std::string &source, std::vector<ClashProxyProviderConfig> &providers)
+{
+    if(source.empty())
+        return true;
+
+    std::string content = source;
+    if(strFind(content, "%"))
+        content = urlDecode(content);
+    content = trim(content);
+    if(content.empty())
+        return true;
+
+    rapidjson::Document json;
+    json.Parse(content.data());
+    if(json.HasParseError())
+    {
+        std::string compatible = replaceAllDistinct(content, "\'", "\"");
+        json.Parse(compatible.data());
+        if(json.HasParseError())
+            return false;
+    }
+
+    if(!json.IsArray())
+        return false;
+
+    providers.clear();
+    std::unordered_set<std::string> names;
+    for(const auto &item : json.GetArray())
+    {
+        if(!item.IsObject())
+            continue;
+        ClashProxyProviderConfig provider;
+        provider.Name = GetMember(item, "name");
+        provider.Url = GetMember(item, "url");
+        if(provider.Name.empty() || provider.Url.empty())
+            continue;
+        provider.Type = GetMember(item, "type");
+        if(provider.Type.empty())
+            provider.Type = "http";
+        provider.Path = GetMember(item, "path");
+        if(provider.Path.empty())
+            provider.Path = "./proxy_provider/" + sanitizeProviderNameForPath(provider.Name) + ".yaml";
+        provider.Interval = to_int(GetMember(item, "interval"), 3600);
+        if(provider.Interval <= 0)
+            provider.Interval = 3600;
+        if(names.emplace(provider.Name).second)
+            providers.emplace_back(std::move(provider));
+    }
+    return true;
 }
 
 std::string getRuleset(RESPONSE_CALLBACK_ARGS) {
@@ -340,6 +401,9 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         "filename"), argUpdateInterval = getUrlArg(
         argument, "interval"), argUpdateStrict = getUrlArg(argument, "strict");
     std::string argRenames = getUrlArg(argument, "rename"), argFilterScript = getUrlArg(argument, "filter_script");
+    std::string argDialerGroupName = getUrlArg(argument, "dialer_group_name");
+    std::string argApplyDialerTo = getUrlArg(argument, "apply_dialer_to");
+    std::string argProxyProviders = getUrlArg(argument, "proxy_providers");
 
     /// switches with default value
     tribool argUpload = getUrlArg(argument, "upload"), argEmoji = getUrlArg(argument, "emoji"), argAddEmoji = getUrlArg(
@@ -354,6 +418,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     tribool argPrependInsert = getUrlArg(argument, "prepend"), argGenClassicalRuleProvider = getUrlArg(argument,
         "classic"), argTLS13 = getUrlArg(
         argument, "tls13");
+    tribool argUseDialer = getUrlArg(argument, "use_dialer");
 
     std::string base_content, output_content;
     ProxyGroupConfigs lCustomProxyGroups = global.customProxyGroups;
@@ -373,6 +438,16 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     if (std::find(gRegexBlacklist.cbegin(), gRegexBlacklist.cend(), argIncludeRemark) != gRegexBlacklist.cend() ||
         std::find(gRegexBlacklist.cbegin(), gRegexBlacklist.cend(), argExcludeRemark) != gRegexBlacklist.cend())
         return "Invalid request!";
+    if(argUseDialer && !argApplyDialerTo.empty() && !regValid(argApplyDialerTo))
+    {
+        *status_code = 400;
+        return "Invalid apply_dialer_to regex!";
+    }
+    if(!argProxyProviders.empty() && !parseProxyProviders(argProxyProviders, ext.clash_proxy_providers))
+    {
+        *status_code = 400;
+        return "Invalid proxy_providers argument!";
+    }
 
     /// for external configuration
     std::string lClashBase = global.clashBase, lSurgeBase = global.surgeBase, lMellowBase = global.mellowBase,
@@ -622,6 +697,15 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         nodes.swap(insert_nodes);
     } else {
         std::move(insert_nodes.begin(), insert_nodes.end(), std::back_inserter(nodes));
+    }
+    if(argUseDialer)
+    {
+        std::string dialer_group = argDialerGroupName.empty() ? "dialer" : argDialerGroupName;
+        for(Proxy &x : nodes)
+        {
+            if(argApplyDialerTo.empty() || regFind(x.Remark, argApplyDialerTo))
+                x.UnderlyingProxy = dialer_group;
+        }
     }
     //run filter script
     std::string filterScript = global.filterScript;

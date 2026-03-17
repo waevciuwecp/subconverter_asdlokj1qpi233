@@ -26,6 +26,7 @@ struct ProxyGroupConfig
     ProxyGroupType Type;
     StrArray Proxies;
     StrArray UsingProvider;
+    StrArray ProviderFilterRules;
     String Url;
     Integer Interval = 0;
     Integer Timeout = 0;
