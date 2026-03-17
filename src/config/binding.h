@@ -302,27 +302,64 @@ namespace INIBinding
                     continue;
                 }
 
-                if(conf.Type == ProxyGroupType::URLTest || conf.Type == ProxyGroupType::LoadBalance || conf.Type == ProxyGroupType::Fallback)
+                auto looks_like_group_times = [](const String &value)
                 {
-                    if(conf.Type == ProxyGroupType::LoadBalance && rules_upper_bound >= 6)
+                    if(value.empty())
+                        return false;
+                    for(const char ch : value)
                     {
-                        switch(hash_(vArray[rules_upper_bound - 1]))
-                        {
-                        case "consistent-hashing"_hash:
-                            conf.Strategy = BalanceStrategy::ConsistentHashing;
-                            rules_upper_bound--;
-                            break;
-                        case "round-robin"_hash:
-                            conf.Strategy = BalanceStrategy::RoundRobin;
-                            rules_upper_bound--;
-                            break;
-                        default:
-                            break;
-                        }
+                        if((ch < '0' || ch > '9') && ch != ',')
+                            return false;
                     }
+                    return true;
+                };
+
+                if(conf.Type == ProxyGroupType::URLTest || conf.Type == ProxyGroupType::Fallback)
+                {
                     if(rules_upper_bound < 5)
                         continue;
                     rules_upper_bound -= 2;
+                    conf.Url = vArray[rules_upper_bound];
+                    parseGroupTimes(vArray[rules_upper_bound + 1], &conf.Interval, &conf.Timeout, &conf.Tolerance);
+                }
+                else if(conf.Type == ProxyGroupType::LoadBalance)
+                {
+                    if(rules_upper_bound < 5)
+                        continue;
+
+                    bool explicit_strategy = false;
+                    if(rules_upper_bound >= 6)
+                    {
+                        const String &last_element = vArray[rules_upper_bound - 1];
+                        switch(hash_(last_element))
+                        {
+                        case "consistent-hashing"_hash:
+                            conf.Strategy = BalanceStrategy::ConsistentHashing;
+                            explicit_strategy = true;
+                            break;
+                        case "round-robin"_hash:
+                            conf.Strategy = BalanceStrategy::RoundRobin;
+                            explicit_strategy = true;
+                            break;
+                        case ""_hash:
+                            conf.Strategy = BalanceStrategy::ConsistentHashing;
+                            explicit_strategy = true;
+                            break;
+                        default:
+                            // If the last token cannot be a valid group-time field, treat it as
+                            // an invalid strategy token and keep backward-compatible default.
+                            if(!looks_like_group_times(last_element))
+                            {
+                                writeLog(0, "LoadBalance strategy '" + last_element + "' for group '" + conf.Name +
+                                           "' is invalid, fallback to consistent-hashing.", LOG_LEVEL_WARNING);
+                                conf.Strategy = BalanceStrategy::ConsistentHashing;
+                                explicit_strategy = true;
+                            }
+                            break;
+                        }
+                    }
+
+                    rules_upper_bound -= explicit_strategy ? 3 : 2;
                     conf.Url = vArray[rules_upper_bound];
                     parseGroupTimes(vArray[rules_upper_bound + 1], &conf.Interval, &conf.Timeout, &conf.Tolerance);
                 }
