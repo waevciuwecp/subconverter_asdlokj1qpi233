@@ -440,15 +440,12 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
             !global.APIMode || getUrlArg(argument, "token") == global.accessToken, strict = !argUpdateStrict.empty()
         ? argUpdateStrict == "true"
         : global.updateStrict;
+    ExternalConfig extconf;
+    bool has_external_config = false;
 
     if (std::find(gRegexBlacklist.cbegin(), gRegexBlacklist.cend(), argIncludeRemark) != gRegexBlacklist.cend() ||
         std::find(gRegexBlacklist.cbegin(), gRegexBlacklist.cend(), argExcludeRemark) != gRegexBlacklist.cend())
         return "Invalid request!";
-    if(argUseDialer && !argApplyDialerTo.empty() && !regValid(argApplyDialerTo))
-    {
-        *status_code = 400;
-        return "Invalid apply_dialer_to regex!";
-    }
     if(!argProxyProviders.empty() && !parseProxyProviders(argProxyProviders, ext.clash_proxy_providers))
     {
         *status_code = 400;
@@ -545,9 +542,9 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     if (!argExternalConfig.empty()) {
         //std::cerr<<"External configuration file provided. Loading...\n";
         writeLog(0, "External configuration file provided. Loading...", LOG_LEVEL_INFO);
-        ExternalConfig extconf;
         extconf.tpl_args = &tpl_args;
         if (loadExternalConfig(argExternalConfig, extconf) == 0) {
+            has_external_config = true;
             if (!ext.nodelist) {
                 checkExternalBase(extconf.sssub_rule_base, lSSSubBase);
                 if (!lSimpleSubscription) {
@@ -594,6 +591,22 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
             }
         }
     }
+    if(has_external_config)
+    {
+        argUseDialer.define(extconf.use_dialer);
+        if(argDialerGroupName.empty())
+            argDialerGroupName = extconf.dialer_group_name;
+        if(argApplyDialerTo.empty())
+            argApplyDialerTo = extconf.apply_dialer_to;
+        if(ext.clash_proxy_providers.empty() && !extconf.clash_proxy_providers.empty())
+            ext.clash_proxy_providers = extconf.clash_proxy_providers;
+    }
+    if(argUseDialer && !argApplyDialerTo.empty() && !regValid(argApplyDialerTo))
+    {
+        *status_code = 400;
+        return "Invalid apply_dialer_to regex!";
+    }
+
     if (ext.enable_rule_generator && !ext.nodelist && !lSimpleSubscription) {
         if (lCustomRulesets != global.customRulesets)
             refreshRulesets(lCustomRulesets, lRulesetContent);

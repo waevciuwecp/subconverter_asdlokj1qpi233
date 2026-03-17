@@ -1,5 +1,6 @@
 #include <string>
 #include <mutex>
+#include <cctype>
 
 #include "config/binding.h"
 #include "handler/webget.h"
@@ -20,6 +21,127 @@ extern WebServer webServer;
 
 const std::map<std::string, ruleset_type> RulesetTypes = {{"clash-domain:", RULESET_CLASH_DOMAIN}, {"clash-ipcidr:", RULESET_CLASH_IPCIDR}, {"clash-classic:", RULESET_CLASH_CLASSICAL}, \
             {"quanx:", RULESET_QUANX}, {"surge:", RULESET_SURGE}};
+
+static std::string sanitizeProviderNameForPath(const std::string &name)
+{
+    std::string safe_name;
+    safe_name.reserve(name.size());
+    for(char ch : name)
+    {
+        if(std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '-' || ch == '.')
+            safe_name.push_back(ch);
+        else
+            safe_name.push_back('_');
+    }
+    if(safe_name.empty())
+        return "provider";
+    return safe_name;
+}
+
+static bool readExternalProxyProvidersYAML(const YAML::Node &node, std::vector<ClashProxyProviderConfig> &providers)
+{
+    providers.clear();
+    if(!node.IsDefined())
+        return true;
+
+    auto load_single = [&](const YAML::Node &item, const std::string &name_hint) {
+        ClashProxyProviderConfig provider;
+        if(item.IsMap())
+        {
+            if(!name_hint.empty())
+                provider.Name = name_hint;
+            item["name"] >> provider.Name;
+            item["url"] >> provider.Url;
+            item["type"] >> provider.Type;
+            item["path"] >> provider.Path;
+
+            std::string interval;
+            item["interval"] >> interval;
+            provider.Interval = to_int(interval, 3600);
+            if(provider.Interval <= 0)
+                provider.Interval = 3600;
+        }
+        if(provider.Name.empty() || provider.Url.empty())
+            return;
+        if(provider.Type.empty())
+            provider.Type = "http";
+        if(provider.Path.empty())
+            provider.Path = "./proxy_provider/" + sanitizeProviderNameForPath(provider.Name) + ".yaml";
+        providers.emplace_back(std::move(provider));
+    };
+
+    if(node.IsSequence())
+    {
+        for(const YAML::Node &item : node)
+            load_single(item, "");
+        return true;
+    }
+    if(node.IsMap())
+    {
+        for(auto it = node.begin(); it != node.end(); ++it)
+        {
+            load_single(it->second, safe_as<std::string>(it->first));
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool readExternalProxyProvidersTOML(const toml::value &node, std::vector<ClashProxyProviderConfig> &providers)
+{
+    providers.clear();
+
+    auto load_single = [&](const toml::value &item, const std::string &name_hint) -> bool
+    {
+        if(!item.is_table())
+            return false;
+        ClashProxyProviderConfig provider;
+        provider.Name = name_hint;
+        if(item.contains("name"))
+            provider.Name = toml::find<std::string>(item, "name");
+        provider.Url = toml::find_or<std::string>(item, "url", "");
+        provider.Type = toml::find_or<std::string>(item, "type", "http");
+        provider.Path = toml::find_or<std::string>(item, "path", "");
+        provider.Interval = toml::find_or<int>(item, "interval", 3600);
+        if(provider.Interval <= 0)
+            provider.Interval = 3600;
+        if(provider.Name.empty() || provider.Url.empty())
+            return true;
+        if(provider.Type.empty())
+            provider.Type = "http";
+        if(provider.Path.empty())
+            provider.Path = "./proxy_provider/" + sanitizeProviderNameForPath(provider.Name) + ".yaml";
+        providers.emplace_back(std::move(provider));
+        return true;
+    };
+
+    try
+    {
+        if(node.is_array())
+        {
+            for(const toml::value &item : node.as_array())
+            {
+                if(!load_single(item, ""))
+                    return false;
+            }
+            return true;
+        }
+        if(node.is_table())
+        {
+            for(const auto &item : node.as_table())
+            {
+                if(!load_single(item.second, item.first))
+                    return false;
+            }
+            return true;
+        }
+    }
+    catch (toml::exception&)
+    {
+        return false;
+    }
+    return false;
+}
 
 int importItems(string_array &target, bool scope_limit)
 {
@@ -189,11 +311,18 @@ void readGroup(YAML::Node node, string_array &dest, bool scope_limit = true)
         object["interval"] >>= interval;
         object["tolerance"] >>= tolerance;
         object["timeout"] >>= timeout;
-        for(std::size_t j = 0; j < object["rule"].size(); j++)
-            tempArray.emplace_back(safe_as<std::string>(object["rule"][j]));
+        YAML::Node rules_node = object["rule"];
+        if(!rules_node.IsDefined())
+            rules_node = object["proxies"];
+        if(rules_node.IsSequence())
+        {
+            for(std::size_t j = 0; j < rules_node.size(); j++)
+                tempArray.emplace_back(safe_as<std::string>(rules_node[j]));
+        }
         switch(hash_(type))
         {
         case "select"_hash:
+        case "relay"_hash:
             if(tempArray.size() < 3)
                 continue;
             break;
@@ -1129,6 +1258,18 @@ int loadExternalYAML(YAML::Node &node, ExternalConfig &ext)
 
     section["include_remarks"] >> ext.include;
     section["exclude_remarks"] >> ext.exclude;
+    if(section["use_dialer"].IsDefined())
+        ext.use_dialer = safe_as<bool>(section["use_dialer"]);
+    section["dialer_group_name"] >> ext.dialer_group_name;
+    section["apply_dialer_to"] >> ext.apply_dialer_to;
+
+    const char *providers_name = section["proxy_providers"].IsDefined() ? "proxy_providers" : "proxy-providers";
+    if(section[providers_name].IsDefined() &&
+       !readExternalProxyProvidersYAML(section[providers_name], ext.clash_proxy_providers))
+    {
+        writeLog(0, "Invalid proxy_providers format in external YAML config.", LOG_LEVEL_ERROR);
+        return -1;
+    }
 
     if(node["template_args"].IsSequence() && ext.tpl_args != NULL)
     {
@@ -1163,8 +1304,27 @@ int loadExternalTOML(toml::value &root, ExternalConfig &ext)
                   "add_emoji", ext.add_emoji,
                   "remove_old_emoji", ext.remove_old_emoji,
                   "include_remarks", ext.include,
-                  "exclude_remarks", ext.exclude
+                  "exclude_remarks", ext.exclude,
+                  "use_dialer", ext.use_dialer,
+                  "dialer_group_name", ext.dialer_group_name,
+                  "apply_dialer_to", ext.apply_dialer_to
     );
+
+    const toml::value *providers = nullptr;
+    if(section.contains("proxy_providers"))
+        providers = &toml::find(section, "proxy_providers");
+    else if(section.contains("proxy-providers"))
+        providers = &toml::find(section, "proxy-providers");
+    else if(root.contains("proxy_providers"))
+        providers = &toml::find(root, "proxy_providers");
+    else if(root.contains("proxy-providers"))
+        providers = &toml::find(root, "proxy-providers");
+
+    if(providers != nullptr && !readExternalProxyProvidersTOML(*providers, ext.clash_proxy_providers))
+    {
+        writeLog(0, "Invalid proxy_providers format in external TOML config.", LOG_LEVEL_ERROR);
+        return -1;
+    }
 
     if(ext.tpl_args != nullptr) operate_toml_kv_table(toml::find_or<std::vector<toml::table>>(section, "template_args", {}), "key", "value",
                                                       [&](const toml::value &key, const toml::value &value)

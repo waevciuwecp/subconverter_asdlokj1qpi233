@@ -120,6 +120,8 @@ namespace toml
             }
             conf.Timeout = find_or(v, "timeout", 5);
             conf.Proxies = find_or<StrArray>(v, "rule", {});
+            if(conf.Proxies.empty())
+                conf.Proxies = find_or<StrArray>(v, "proxies", {});
             conf.UsingProvider = find_or<StrArray>(v, "use", {});
             if(provider_rule_mode)
             {

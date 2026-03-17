@@ -2,12 +2,14 @@
 #define SETTINGS_H_INCLUDED
 
 #include <string>
+#include <vector>
 
 #include "config/crontask.h"
 #include "config/regmatch.h"
 #include "config/proxygroup.h"
 #include "config/ruleset.h"
 #include "generator/config/ruleconvert.h"
+#include "generator/config/subexport.h"
 #include "generator/template/templates.h"
 #include "utils/logger.h"
 #include "utils/string.h"
@@ -95,6 +97,10 @@ struct ExternalConfig
     bool enable_rule_generator = true;
     tribool add_emoji;
     tribool remove_old_emoji;
+    tribool use_dialer;
+    std::string dialer_group_name;
+    std::string apply_dialer_to;
+    std::vector<ClashProxyProviderConfig> clash_proxy_providers;
 };
 
 extern Settings global;
