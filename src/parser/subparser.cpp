@@ -1200,6 +1200,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
         std::vector<String> alpns;
         String alpn2;
         std::string fingerprint, multiplexing, transfer_protocol, v2ray_http_upgrade;
+        std::string underlying_proxy;
         tribool udp, tfo, scv;
         bool reduceRtt, disableSni; //tuic
         std::vector<std::string> alpnList;
@@ -1216,6 +1217,9 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 continue;
         udp = safe_as<std::string>(singleproxy["udp"]);
         scv = safe_as<std::string>(singleproxy["skip-cert-verify"]);
+        singleproxy["dialer-proxy"] >>= underlying_proxy;
+        if(underlying_proxy.empty())
+            singleproxy["underlying-proxy"] >>= underlying_proxy;
         switch (hash_(proxytype)) {
             case "vmess"_hash:
                 singleproxy["uuid"] >>= id;
@@ -1267,7 +1271,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["alpn"] >>= alpnList;
                 vmessConstruct(node, group, ps, server, port, "", id, aid, net, cipher, path, host, edge, tls, sni,
                                alpnList, udp,
-                               tfo, scv);
+                               tfo, scv, tribool(), underlying_proxy);
                 break;
             case "ss"_hash:
                 group = SS_DEFAULT_GROUP;
@@ -1328,7 +1332,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                     std::transform(cipher.begin(), cipher.end(), cipher.begin(), ::tolower);
                 }
 
-                ssConstruct(node, group, ps, server, port, password, cipher, plugin, pluginopts, udp, tfo, scv);
+                ssConstruct(node, group, ps, server, port, password, cipher, plugin, pluginopts, udp, tfo, scv, tribool(), underlying_proxy);
                 break;
             case "socks5"_hash:
                 group = SOCKS_DEFAULT_GROUP;
@@ -1336,7 +1340,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["username"] >>= user;
                 singleproxy["password"] >>= password;
 
-                socksConstruct(node, group, ps, server, port, user, password);
+                socksConstruct(node, group, ps, server, port, user, password, udp, tfo, scv, underlying_proxy);
                 break;
             case "ssr"_hash:
                 group = SSR_DEFAULT_GROUP;
@@ -1356,7 +1360,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                     singleproxy["obfsparam"] >>= obfsparam;
 
                 ssrConstruct(node, group, ps, server, port, protocol, cipher, obfs, password, obfsparam, protoparam,
-                             udp, tfo, scv);
+                             udp, tfo, scv, underlying_proxy);
                 break;
             case "http"_hash:
                 group = HTTP_DEFAULT_GROUP;
@@ -1365,7 +1369,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["password"] >>= password;
                 singleproxy["tls"] >>= tls;
 
-                httpConstruct(node, group, ps, server, port, user, password, tls == "true", tfo, scv);
+                httpConstruct(node, group, ps, server, port, user, password, tls == "true", tfo, scv, tribool(), underlying_proxy);
                 break;
             case "trojan"_hash:
                 group = TROJAN_DEFAULT_GROUP;
@@ -1388,7 +1392,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["alpn"] >>= alpnList;
 
                 trojanConstruct(node, group, ps, server, port, password, net, host, path, fp, sni, alpnList, true, udp,
-                                tfo, scv);
+                                tfo, scv, tribool(), underlying_proxy);
                 break;
             case "snell"_hash:
                 group = SNELL_DEFAULT_GROUP;
@@ -1397,7 +1401,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["obfs-opts"]["host"] >>= host;
                 singleproxy["version"] >>= aid;
 
-                snellConstruct(node, group, ps, server, port, password, obfs, host, to_int(aid, 0), udp, tfo, scv);
+                snellConstruct(node, group, ps, server, port, password, obfs, host, to_int(aid, 0), udp, tfo, scv, underlying_proxy);
                 break;
             case "wireguard"_hash:
                 group = WG_DEFAULT_GROUP;
@@ -1410,7 +1414,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["ipv6"] >>= ipv6;
 
                 wireguardConstruct(node, group, ps, server, port, ip, ipv6, private_key, public_key, password,
-                                   dns_server, mtu, "0", "", "", udp, "");
+                                   dns_server, mtu, "0", "", "", udp, underlying_proxy);
                 break;
             case "vless"_hash:
                 group = XRAY_DEFAULT_GROUP;
@@ -1483,7 +1487,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["udp"] >> vless_udp;
                 vlessConstruct(node, XRAY_DEFAULT_GROUP, ps, server, port, type, id, aid, net, "auto", flow, mode, path,
                                host, "", tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption, udp, tribool(), tribool(),
-                               tribool(), "", v2ray_http_upgrade);
+                               tribool(), underlying_proxy, v2ray_http_upgrade);
                 break;
             case "hysteria"_hash:
                 group = HYSTERIA_DEFAULT_GROUP;
@@ -1506,7 +1510,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 sni = host;
                 hysteriaConstruct(node, group, ps, server, port, type, auth, "", host, up, down, alpn, obfsParam,
                                   insecure, ports, sni,
-                                  udp, tfo, scv);
+                                  udp, tfo, scv, tribool(), underlying_proxy);
                 break;
             case "hysteria2"_hash:
                 group = HYSTERIA2_DEFAULT_GROUP;
@@ -1538,7 +1542,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["ports"] >> ports;
                 sni = host;
                 hysteria2Construct(node, group, ps, server, port, password, host, up, down, alpn, obfsParam,
-                                   obfsPassword, sni, public_key, ports, udp, tfo, scv);
+                                   obfsPassword, sni, public_key, ports, udp, tfo, scv, underlying_proxy);
                 break;
             case "tuic"_hash:
                 group = TUIC_DEFAULT_GROUP;
@@ -1558,7 +1562,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 tuicConstruct(node, TUIC_DEFAULT_GROUP, ps, server, port, password, congestion_control, alpn, sni, id,
                               udp_relay_mode, token,
                               tribool(),
-                              tribool(), scv, reduceRtt, disableSni, request_timeout);
+                              tribool(), scv, reduceRtt, disableSni, request_timeout, underlying_proxy);
 
                 break;
             case "anytls"_hash:
@@ -1577,7 +1581,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 singleproxy["fingerprint"] >>= fingerprint;
                 anyTlSConstruct(node, ANYTLS_DEFAULT_GROUP, ps, port, password, server, alpns, fingerprint, sni,
                                 udp,
-                                tribool(), scv, tribool(), "", 30, 30, 0);
+                                tribool(), scv, tribool(), underlying_proxy, 30, 30, 0);
                 break;
             case "mieru"_hash:
                 group = MIERU_DEFAULT_GROUP;
@@ -1594,7 +1598,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 mieruConstruct(node, MIERU_DEFAULT_GROUP, ps, port, password, server, ports, user, multiplexing,
                                transfer_protocol,
                                udp,
-                               tribool(), scv, tribool(), "");
+                               tribool(), scv, tribool(), underlying_proxy);
                 break;
             default:
                 continue;

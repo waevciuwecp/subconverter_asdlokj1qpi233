@@ -2,6 +2,7 @@
 #define SUBEXPORT_H_INCLUDED
 
 #include <string>
+#include <vector>
 
 #ifndef NO_JS_RUNTIME
 #include <quickjspp.hpp>
@@ -14,6 +15,15 @@
 #include "utils/string.h"
 #include "utils/yamlcpp_extra.h"
 #include "ruleconvert.h"
+
+struct ClashProxyProviderConfig
+{
+    std::string Name;
+    std::string Type = "http";
+    std::string Url;
+    std::string Path;
+    int Interval = 3600;
+};
 
 struct extra_settings
 {
@@ -41,6 +51,7 @@ struct extra_settings
     std::string sort_script;
     std::string clash_proxies_style = "flow";
     std::string clash_proxy_groups_style = "flow";
+    std::vector<ClashProxyProviderConfig> clash_proxy_providers;
     bool authorized = false;
 
     extra_settings() = default;

@@ -9,3 +9,6 @@ scripts/yaml-cpp
 src/.DS_Store
 
 build
+/scripts/tests/.live_dialer_case/cache
+/scripts/tests/.live_dialer_case
+scripts/tests/live_dialer_case.sh

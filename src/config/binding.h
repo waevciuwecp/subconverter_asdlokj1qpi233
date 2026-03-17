@@ -17,6 +17,7 @@ namespace toml
         static ProxyGroupConfig from_toml(const value& v)
         {
             ProxyGroupConfig conf;
+            bool provider_rule_mode = false;
             conf.Name = find<String>(v, "name");
             String type = find<String>(v, "type");
             String strategy = find_or<String>(v, "strategy", "");
@@ -25,8 +26,23 @@ namespace toml
             case "select"_hash:
                 conf.Type = ProxyGroupType::Select;
                 break;
+            case "select-use"_hash:
+                conf.Type = ProxyGroupType::Select;
+                provider_rule_mode = true;
+                break;
             case "url-test"_hash:
                 conf.Type = ProxyGroupType::URLTest;
+                conf.Url = find<String>(v, "url");
+                conf.Interval = find<Integer>(v, "interval");
+                conf.Tolerance = find_or<Integer>(v, "tolerance", 0);
+                if(v.contains("lazy"))
+                    conf.Lazy = find_or<bool>(v, "lazy", false);
+                if(v.contains("evaluate-before-use"))
+                    conf.EvaluateBeforeUse = find_or(v, "evaluate-before-use", conf.EvaluateBeforeUse.get());
+                break;
+            case "url-test-use"_hash:
+                conf.Type = ProxyGroupType::URLTest;
+                provider_rule_mode = true;
                 conf.Url = find<String>(v, "url");
                 conf.Interval = find<Integer>(v, "interval");
                 conf.Tolerance = find_or<Integer>(v, "tolerance", 0);
@@ -51,8 +67,33 @@ namespace toml
                 if(v.contains("persistent"))
                     conf.Persistent = find_or(v, "persistent", conf.Persistent.get());
                 break;
+            case "load-balance-use"_hash:
+                conf.Type = ProxyGroupType::LoadBalance;
+                provider_rule_mode = true;
+                conf.Url = find<String>(v, "url");
+                conf.Interval = find<Integer>(v, "interval");
+                switch(hash_(strategy))
+                {
+                case "consistent-hashing"_hash:
+                    conf.Strategy = BalanceStrategy::ConsistentHashing;
+                    break;
+                case "round-robin"_hash:
+                    conf.Strategy = BalanceStrategy::RoundRobin;
+                    break;
+                }
+                if(v.contains("persistent"))
+                    conf.Persistent = find_or(v, "persistent", conf.Persistent.get());
+                break;
             case "fallback"_hash:
                 conf.Type = ProxyGroupType::Fallback;
+                conf.Url = find<String>(v, "url");
+                conf.Interval = find<Integer>(v, "interval");
+                if(v.contains("evaluate-before-use"))
+                    conf.EvaluateBeforeUse = find_or(v, "evaluate-before-use", conf.EvaluateBeforeUse.get());
+                break;
+            case "fallback-use"_hash:
+                conf.Type = ProxyGroupType::Fallback;
+                provider_rule_mode = true;
                 conf.Url = find<String>(v, "url");
                 conf.Interval = find<Integer>(v, "interval");
                 if(v.contains("evaluate-before-use"))
@@ -75,12 +116,17 @@ namespace toml
                     conf.EvaluateBeforeUse = find_or(v, "evaluate-before-use", conf.EvaluateBeforeUse.get());
                 break;
             default:
-                throw serialization_error(format_error("Proxy Group has unsupported type!", v.at("type").location(), "should be one of following: select, url-test, load-balance, fallback, relay, ssid"), v.at("type").location());
+                throw serialization_error(format_error("Proxy Group has unsupported type!", v.at("type").location(), "should be one of following: select, select-use, url-test, url-test-use, load-balance, load-balance-use, fallback, fallback-use, relay, ssid"), v.at("type").location());
             }
             conf.Timeout = find_or(v, "timeout", 5);
             conf.Proxies = find_or<StrArray>(v, "rule", {});
             conf.UsingProvider = find_or<StrArray>(v, "use", {});
-            if(conf.Proxies.empty() && conf.UsingProvider.empty())
+            if(provider_rule_mode)
+            {
+                conf.ProviderFilterRules = conf.Proxies;
+                conf.Proxies.clear();
+            }
+            if(conf.Proxies.empty() && conf.UsingProvider.empty() && conf.ProviderFilterRules.empty())
                 throw serialization_error(format_error("Proxy Group must contains at least one of proxy match rule or provider!", v.location(), "here"), v.location());
             if(v.contains("disable-udp"))
                 conf.DisableUdp = find_or(v, "disable-udp", conf.DisableUdp.get());
@@ -201,6 +247,7 @@ namespace INIBinding
             {
                 unsigned int rules_upper_bound = 0;
                 ProxyGroupConfig conf;
+                bool provider_rule_mode = false;
 
                 StrArray vArray = split(x, "`");
                 if(vArray.size() < 3)
@@ -215,17 +262,33 @@ namespace INIBinding
                 case "select"_hash:
                     conf.Type = ProxyGroupType::Select;
                     break;
+                case "select-use"_hash:
+                    conf.Type = ProxyGroupType::Select;
+                    provider_rule_mode = true;
+                    break;
                 case "relay"_hash:
                     conf.Type = ProxyGroupType::Relay;
                     break;
                 case "url-test"_hash:
                     conf.Type = ProxyGroupType::URLTest;
                     break;
+                case "url-test-use"_hash:
+                    conf.Type = ProxyGroupType::URLTest;
+                    provider_rule_mode = true;
+                    break;
                 case "fallback"_hash:
                     conf.Type = ProxyGroupType::Fallback;
                     break;
+                case "fallback-use"_hash:
+                    conf.Type = ProxyGroupType::Fallback;
+                    provider_rule_mode = true;
+                    break;
                 case "load-balance"_hash:
                     conf.Type = ProxyGroupType::LoadBalance;
+                    break;
+                case "load-balance-use"_hash:
+                    conf.Type = ProxyGroupType::LoadBalance;
+                    provider_rule_mode = true;
                     break;
                 case "ssid"_hash:
                     conf.Type = ProxyGroupType::SSID;
@@ -239,6 +302,22 @@ namespace INIBinding
 
                 if(conf.Type == ProxyGroupType::URLTest || conf.Type == ProxyGroupType::LoadBalance || conf.Type == ProxyGroupType::Fallback)
                 {
+                    if(conf.Type == ProxyGroupType::LoadBalance && rules_upper_bound >= 6)
+                    {
+                        switch(hash_(vArray[rules_upper_bound - 1]))
+                        {
+                        case "consistent-hashing"_hash:
+                            conf.Strategy = BalanceStrategy::ConsistentHashing;
+                            rules_upper_bound--;
+                            break;
+                        case "round-robin"_hash:
+                            conf.Strategy = BalanceStrategy::RoundRobin;
+                            rules_upper_bound--;
+                            break;
+                        default:
+                            break;
+                        }
+                    }
                     if(rules_upper_bound < 5)
                         continue;
                     rules_upper_bound -= 2;
@@ -254,6 +333,8 @@ namespace INIBinding
                         conf.UsingProvider.reserve(conf.UsingProvider.size() + list.size());
                         std::move(list.begin(), list.end(), std::back_inserter(conf.UsingProvider));
                     }
+                    else if(provider_rule_mode)
+                        conf.ProviderFilterRules.emplace_back(std::move(vArray[i]));
                     else
                         conf.Proxies.emplace_back(std::move(vArray[i]));
                 }
