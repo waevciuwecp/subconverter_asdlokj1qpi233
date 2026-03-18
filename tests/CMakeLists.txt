@@ -2,9 +2,26 @@ if(CMAKE_VERSION VERSION_LESS 3.11)
     message(FATAL_ERROR "Unit tests require CMake >= 3.11 for FetchContent.")
 endif()
 
+include(FetchContent)
+
+find_path(SUBCONVERTER_TOML11_INCLUDE_DIR NAMES toml.hpp)
+if(NOT SUBCONVERTER_TOML11_INCLUDE_DIR)
+    FetchContent_Declare(
+        toml11
+        GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
+        GIT_TAG v4.3.0
+    )
+    FetchContent_GetProperties(toml11)
+    if(NOT toml11_POPULATED)
+        FetchContent_Populate(toml11)
+    endif()
+    set(SUBCONVERTER_TOML11_INCLUDE_DIR ${toml11_SOURCE_DIR}/include)
+endif()
+
+target_include_directories(${BUILD_TARGET_NAME} PRIVATE ${SUBCONVERTER_TOML11_INCLUDE_DIR})
+
 find_package(doctest CONFIG QUIET)
 if(NOT doctest_FOUND)
-    include(FetchContent)
     FetchContent_Declare(
         doctest
         GIT_REPOSITORY https://github.com/doctest/doctest.git
