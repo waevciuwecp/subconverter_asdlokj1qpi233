@@ -78,7 +78,7 @@ jobs:
           cmake --build build-coverage --parallel
           ctest --test-dir build-coverage --output-on-failure
 
-      - name: Generate coverage report (line >= 60%)
+      - name: Generate coverage report (branch >= 60%)
         run: |
           mkdir -p coverage
           gcovr \
@@ -89,7 +89,7 @@ jobs:
             --output coverage/coverage.xml \
             --txt coverage/coverage.txt \
             --print-summary \
-            --fail-under-line 60
+            --fail-under-branch 60
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
