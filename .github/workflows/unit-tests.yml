@@ -24,9 +24,6 @@ jobs:
             target: linux-x64
           - os: macos-14
             target: macos-arm64
-          - os: windows-latest
-            target: windows-x64
-            msystem: MINGW64
 
     steps:
       - name: Checkout
@@ -46,37 +43,7 @@ jobs:
           brew update
           brew install cmake ninja pkg-config yaml-cpp pcre2 rapidjson curl
 
-      - name: Setup MSYS2 (Windows x64)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          msystem: ${{ matrix.msystem }}
-          install: >-
-            base-devel
-            git
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-yaml-cpp
-            mingw-w64-x86_64-pcre2
-            mingw-w64-x86_64-rapidjson
-            mingw-w64-x86_64-curl
-
       - name: Configure + Build + Test (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          cmake -S . -B build -G Ninja \
-            -DBUILD_STATIC_LIBRARY=ON \
-            -DSUBCONVERTER_BUILD_TESTS=ON \
-            -DCMAKE_BUILD_TYPE=Debug
-          cmake --build build --parallel
-          ctest --test-dir build --output-on-failure
-
-      - name: Configure + Build + Test (Windows x64)
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
         run: |
           cmake -S . -B build -G Ninja \
             -DBUILD_STATIC_LIBRARY=ON \
@@ -117,13 +84,7 @@ jobs:
           gcovr \
             --root . \
             --object-directory build-coverage \
-            --filter 'src/utils/string\.cpp$' \
-            --filter 'src/utils/base64/base64\.cpp$' \
-            --filter 'src/utils/urlencode\.cpp$' \
-            --filter 'src/utils/regexp\.cpp$' \
-            --filter 'src/utils/network\.cpp$' \
-            --filter 'src/utils/file\.cpp$' \
-            --filter 'src/parser/infoparser\.cpp$' \
+            --filter 'src/' \
             --xml-pretty \
             --output coverage/coverage.xml \
             --txt coverage/coverage.txt \

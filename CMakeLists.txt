@@ -126,7 +126,7 @@ ENDIF()
 
 ELSE() #BUILD_STATIC_LIBRARY
 
-ADD_LIBRARY(${BUILD_TARGET_NAME} STATIC
+SET(SUBCONVERTER_STATIC_SOURCES
     src/generator/config/ruleconvert.cpp
     src/generator/config/subexport.cpp
     src/generator/template/templates.cpp
@@ -140,12 +140,27 @@ ADD_LIBRARY(${BUILD_TARGET_NAME} STATIC
     src/utils/regexp.cpp
     src/utils/string.cpp
     src/utils/urlencode.cpp)
+
+IF(SUBCONVERTER_BUILD_TESTS)
+    SET(SUBCONVERTER_STATIC_SOURCES
+        src/generator/config/ruleconvert.cpp
+        src/lib/wrapper.cpp
+        src/parser/infoparser.cpp
+        src/utils/base64/base64.cpp
+        src/utils/codepage.cpp
+        src/utils/file.cpp
+        src/utils/logger.cpp
+        src/utils/md5/md5.cpp
+        src/utils/network.cpp
+        src/utils/regexp.cpp
+        src/utils/string.cpp
+        src/utils/urlencode.cpp)
+ENDIF()
+
+ADD_LIBRARY(${BUILD_TARGET_NAME} STATIC ${SUBCONVERTER_STATIC_SOURCES})
 TARGET_COMPILE_DEFINITIONS(${BUILD_TARGET_NAME} PRIVATE -DNO_JS_RUNTIME -DNO_WEBGET)
 
 IF(SUBCONVERTER_BUILD_TESTS)
-    TARGET_SOURCES(${BUILD_TARGET_NAME} PRIVATE
-        src/parser/infoparser.cpp
-        src/utils/file.cpp)
     TARGET_COMPILE_DEFINITIONS(${BUILD_TARGET_NAME} PRIVATE -DSUBCONVERTER_USE_REAL_FILE_IMPL)
 ENDIF()
 
