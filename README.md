@@ -159,9 +159,13 @@ For Clash/ClashR/Singbox targets, the following advanced query parameters are av
 - `use_dialer=true|false`: enable writing dialer fields for matched nodes (`dialer-proxy` for Clash/ClashR, `detour` for Singbox).
 - `dialer_group_name=<name>`: dialer group name (default: `dialer`).
 - `apply_dialer_to=<regex>`: apply dialer only to node remarks matching this regex (empty = all nodes).
-- `singbox_ver=<version>`: explicit sing-box config version (for example `1.10.0`, `1.11.0`, `1.13.0`). For `>=1.11.0`, generated route rules include `action: route`. Default is `1.10.0`.
+- `singbox_ver=<version>`: explicit sing-box config version in supported range `1.11.x` to `1.14.x` (for example `1.11.0`, `1.13.0`, `1.14.0`). For all supported versions, generated route rules include `action: route`. Default is `1.11.0`.
 - `ver=<version>`: when `target=singbox`, `ver` is accepted as a fallback for `singbox_ver`.
 - `proxy_providers=<urlencoded-json-array>`: inject Clash `proxy-providers` from request input.
+
+Sing-box compatibility notes:
+- `1.11.x` to `1.14.x` is supported explicitly.
+- For `>=1.13.0`, WireGuard **outbound** was removed upstream; WireGuard nodes are skipped in Sing-box output.
 
 `custom_proxy_group` also supports:
 

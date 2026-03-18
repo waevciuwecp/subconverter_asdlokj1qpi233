@@ -926,7 +926,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     if(argTarget == "singbox")
     {
         if(argSingBoxVer.empty())
-            argSingBoxVer = "1.10.0";
+            argSingBoxVer = "1.11.0";
         std::string normalized_singbox_ver;
         if(!normalizeVersion(argSingBoxVer, normalized_singbox_ver))
         {
@@ -934,6 +934,11 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
             return "Invalid singbox_ver!";
         }
         argSingBoxVer = normalized_singbox_ver;
+        if(!verGreaterEqual(argSingBoxVer, "1.11.0") || verGreaterEqual(argSingBoxVer, "1.15.0"))
+        {
+            *status_code = 400;
+            return "Invalid singbox_ver! Supported range: 1.11.x - 1.14.x";
+        }
         ext.singbox_version = argSingBoxVer;
         ext.singbox_use_route_action = verGreaterEqual(argSingBoxVer, "1.11.0");
         tpl_args.request_params["singbox_ver"] = argSingBoxVer;

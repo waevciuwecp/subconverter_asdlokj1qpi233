@@ -7,7 +7,7 @@ overwrite_original_rules = false
 #use_dialer = true
 #dialer_group_name = "dialer"
 #apply_dialer_to = "awesome|Scholar"
-#singbox_version = "1.11.0"
+#singbox_version = "1.11.0" # supported: 1.11.x - 1.14.x
 
 # Options for custom base configuration file
 clash_rule_base = "base/forcerule.yml"

@@ -3,6 +3,7 @@
 #include <numeric>
 #include <cmath>
 #include <climits>
+#include <sstream>
 
 #include "config/regmatch.h"
 #include "generator/config/subexport.h"
@@ -2563,6 +2564,26 @@ static std::string formatSingBoxInterval(Integer interval) {
     return result;
 }
 
+static bool singboxVerGreaterEqual(const std::string &src_ver, const std::string &target_ver) {
+    std::istringstream src_stream(src_ver), target_stream(target_ver);
+    int src_part, target_part;
+    char dot;
+    while (src_stream >> src_part) {
+        if (target_stream >> target_part) {
+            if (src_part < target_part) {
+                return false;
+            } else if (src_part > target_part) {
+                return true;
+            }
+            src_stream >> dot;
+            target_stream >> dot;
+        } else {
+            return true;
+        }
+    }
+    return !bool(target_stream >> target_part);
+}
+
 static rapidjson::Value buildSingBoxTransport(const Proxy &proxy, rapidjson::MemoryPoolAllocator<> &allocator) {
     rapidjson::Value transport(rapidjson::kObjectType);
     switch (hash_(proxy.TransferProtocol)) {
@@ -2772,6 +2793,13 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                 break;
             }
             case ProxyType::WireGuard: {
+                if (singboxVerGreaterEqual(ext.singbox_version, "1.13.0")) {
+                    writeLog(0, "Skip WireGuard outbound '" + x.Remark +
+                                 "' for sing-box " + ext.singbox_version +
+                                 " (WireGuard outbound removed since 1.13.0).",
+                             LOG_LEVEL_WARNING);
+                    continue;
+                }
                 proxy.AddMember("type", "wireguard", allocator);
                 proxy.AddMember("tag", rapidjson::StringRef(x.Remark.c_str()), allocator);
                 proxy.AddMember("inet4_bind_address", rapidjson::StringRef(x.SelfIP.c_str()), allocator);
