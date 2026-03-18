@@ -277,6 +277,11 @@ enhanced-mode-by-rule = true
     "dns": {
         "servers": [
             {
+                "tag": "dns_resolver",
+                "address": "223.5.5.5",
+                "detour": "DIRECT"
+            },
+            {
                 "tag": "dns_proxy",
                 "address": "tls://1.1.1.1",
                 "address_resolver": "dns_resolver"
@@ -292,12 +297,7 @@ enhanced-mode-by-rule = true
                 "address": "fakeip"
             },
             {
-                "tag": "dns_resolver",
-                "address": "223.5.5.5",
-                "detour": "DIRECT"
-            },
-            {
-                "tag": "block",
+                "tag": "dns_block",
                 "address": "rcode://success"
             }
         ],
@@ -363,10 +363,10 @@ enhanced-mode-by-rule = true
         {
             "type": "tun",
             "tag": "tun-in",
-            "inet4_address": "172.19.0.1/30",
-            {% if default(request.singbox.ipv6, "") == "1" %}
-            "inet6_address": "fdfe:dcba:9876::1/126",
-            {% endif %}
+            "address": [
+                "172.19.0.1/30"{% if default(request.singbox.ipv6, "") == "1" %},
+                "fdfe:dcba:9876::1/126"{% endif %}
+            ],
             "auto_route": true,
             "strict_route": true,
             "stack": "mixed",

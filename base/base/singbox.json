@@ -7,6 +7,11 @@
     "dns": {
         "servers": [
             {
+                "tag": "dns_resolver",
+                "address": "223.5.5.5",
+                "detour": "DIRECT"
+            },
+            {
                 "tag": "dns_proxy",
                 "address": "tls://1.1.1.1",
                 "address_resolver": "dns_resolver"
@@ -22,12 +27,7 @@
                 "address": "fakeip"
             },
             {
-                "tag": "dns_resolver",
-                "address": "223.5.5.5",
-                "detour": "DIRECT"
-            },
-            {
-                "tag": "block",
+                "tag": "dns_block",
                 "address": "rcode://success"
             }
         ],
@@ -87,8 +87,10 @@
         {
             "type": "tun",
             "tag": "tun-in",
-            "inet4_address": "172.19.0.1/30",
-            "inet6_address": "fdfe:dcba:9876::1/126",
+            "address": [
+                "172.19.0.1/30",
+                "fdfe:dcba:9876::1/126"
+            ],
             "auto_route": true,
             "strict_route": true,
             "stack": "mixed",

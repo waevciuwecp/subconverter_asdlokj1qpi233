@@ -4,6 +4,7 @@
 #include <cmath>
 #include <climits>
 #include <sstream>
+#include <unordered_set>
 #include <curl/curlver.h>
 
 #include "config/regmatch.h"
@@ -2688,6 +2689,249 @@ static bool singboxVerGreaterEqual(const std::string &src_ver, const std::string
     return !bool(target_stream >> target_part);
 }
 
+struct ParsedLegacyDnsServerAddress {
+    bool valid = false;
+    bool drop = false;
+    std::string type;
+    std::string server;
+    int server_port = -1;
+    std::string path;
+};
+
+static ParsedLegacyDnsServerAddress parseLegacyDnsServerAddress(const std::string &address)
+{
+    ParsedLegacyDnsServerAddress parsed;
+    if(address.empty())
+        return parsed;
+
+    if(address == "local")
+    {
+        parsed.valid = true;
+        parsed.type = "local";
+        return parsed;
+    }
+    if(address == "fakeip")
+    {
+        parsed.valid = true;
+        parsed.type = "fakeip";
+        return parsed;
+    }
+    if(startsWith(address, "rcode://"))
+    {
+        // RCode server is replaced by DNS rule actions in new format.
+        parsed.valid = true;
+        parsed.drop = true;
+        return parsed;
+    }
+
+    auto parse_host_port_path = [&parsed](std::string rest, bool with_path) {
+        std::string host_port = rest;
+        if(with_path)
+        {
+            std::string::size_type slash_pos = rest.find('/');
+            if(slash_pos != std::string::npos)
+            {
+                host_port = rest.substr(0, slash_pos);
+                parsed.path = rest.substr(slash_pos);
+            }
+        }
+        std::string host = host_port;
+        if(!host.empty() && host[0] != '[')
+        {
+            std::string::size_type colon_pos = host_port.rfind(':');
+            if(colon_pos != std::string::npos)
+            {
+                std::string port_str = host_port.substr(colon_pos + 1);
+                if(regMatch(port_str, "^[0-9]+$"))
+                {
+                    parsed.server_port = to_int(port_str, -1);
+                    host = host_port.substr(0, colon_pos);
+                }
+            }
+        }
+        parsed.server = host;
+    };
+
+    if(startsWith(address, "tcp://"))
+    {
+        parsed.valid = true;
+        parsed.type = "tcp";
+        parse_host_port_path(address.substr(6), false);
+        return parsed;
+    }
+    if(startsWith(address, "udp://"))
+    {
+        parsed.valid = true;
+        parsed.type = "udp";
+        parse_host_port_path(address.substr(6), false);
+        return parsed;
+    }
+    if(startsWith(address, "tls://"))
+    {
+        parsed.valid = true;
+        parsed.type = "tls";
+        parse_host_port_path(address.substr(6), false);
+        return parsed;
+    }
+    if(startsWith(address, "https://"))
+    {
+        parsed.valid = true;
+        parsed.type = "https";
+        parse_host_port_path(address.substr(8), true);
+        return parsed;
+    }
+    if(startsWith(address, "quic://"))
+    {
+        parsed.valid = true;
+        parsed.type = "quic";
+        parse_host_port_path(address.substr(7), false);
+        return parsed;
+    }
+    if(startsWith(address, "h3://"))
+    {
+        parsed.valid = true;
+        parsed.type = "h3";
+        parse_host_port_path(address.substr(5), true);
+        return parsed;
+    }
+    if(startsWith(address, "dhcp://"))
+    {
+        parsed.valid = true;
+        parsed.type = "dhcp";
+        std::string iface = address.substr(7);
+        if(iface != "auto" && !iface.empty())
+            parsed.server = iface;
+        return parsed;
+    }
+
+    // Plain address defaults to UDP server.
+    parsed.valid = true;
+    parsed.type = "udp";
+    parsed.server = address;
+    return parsed;
+}
+
+static void migrateLegacyDnsForSingBox(rapidjson::Document &json, const std::string &singbox_version)
+{
+    if(!singboxVerGreaterEqual(singbox_version, "1.12.0"))
+        return;
+    if(!json.HasMember("dns") || !json["dns"].IsObject())
+        return;
+
+    auto &allocator = json.GetAllocator();
+    auto &dns = json["dns"];
+    std::string fakeip_v4 = "198.18.0.0/15";
+    std::string fakeip_v6 = "fc00::/18";
+    if(dns.HasMember("fakeip") && dns["fakeip"].IsObject())
+    {
+        const auto &fakeip = dns["fakeip"];
+        if(fakeip.HasMember("inet4_range") && fakeip["inet4_range"].IsString())
+            fakeip_v4 = fakeip["inet4_range"].GetString();
+        if(fakeip.HasMember("inet6_range") && fakeip["inet6_range"].IsString())
+            fakeip_v6 = fakeip["inet6_range"].GetString();
+    }
+
+    std::unordered_set<std::string> dns_server_tags;
+    if(dns.HasMember("servers") && dns["servers"].IsArray())
+    {
+        rapidjson::Value new_servers(rapidjson::kArrayType);
+        for(auto &server : dns["servers"].GetArray())
+        {
+            if(!server.IsObject())
+                continue;
+            if(!(server.HasMember("address") && server["address"].IsString()))
+            {
+                rapidjson::Value copied(rapidjson::kObjectType);
+                copied.CopyFrom(server, allocator);
+                if(copied.HasMember("tag") && copied["tag"].IsString())
+                    dns_server_tags.emplace(copied["tag"].GetString());
+                new_servers.PushBack(copied, allocator);
+                continue;
+            }
+
+            const std::string legacy_address = server["address"].GetString();
+            ParsedLegacyDnsServerAddress parsed = parseLegacyDnsServerAddress(legacy_address);
+            if(!parsed.valid || parsed.drop)
+            {
+                writeLog(0, "Drop deprecated legacy DNS server for sing-box " + singbox_version + ": " +
+                            legacy_address, LOG_LEVEL_WARNING);
+                continue;
+            }
+
+            rapidjson::Value migrated(rapidjson::kObjectType);
+            migrated.AddMember("type", rapidjson::Value(parsed.type.c_str(), allocator), allocator);
+            if(server.HasMember("tag") && server["tag"].IsString())
+                migrated.AddMember("tag", rapidjson::Value(server["tag"].GetString(), allocator), allocator);
+            if(!parsed.server.empty())
+            {
+                if(parsed.type == "dhcp")
+                    migrated.AddMember("interface", rapidjson::Value(parsed.server.c_str(), allocator), allocator);
+                else
+                    migrated.AddMember("server", rapidjson::Value(parsed.server.c_str(), allocator), allocator);
+            }
+            if(parsed.server_port > 0)
+                migrated.AddMember("server_port", parsed.server_port, allocator);
+            if(!parsed.path.empty() && (parsed.type == "https" || parsed.type == "h3"))
+                migrated.AddMember("path", rapidjson::Value(parsed.path.c_str(), allocator), allocator);
+            if(parsed.type == "fakeip")
+            {
+                migrated.AddMember("inet4_range", rapidjson::Value(fakeip_v4.c_str(), allocator), allocator);
+                migrated.AddMember("inet6_range", rapidjson::Value(fakeip_v6.c_str(), allocator), allocator);
+            }
+            if(server.HasMember("detour") && server["detour"].IsString())
+                migrated.AddMember("detour", rapidjson::Value(server["detour"].GetString(), allocator), allocator);
+            if(server.HasMember("address_resolver") && server["address_resolver"].IsString())
+                migrated.AddMember("domain_resolver",
+                                   rapidjson::Value(server["address_resolver"].GetString(), allocator), allocator);
+            if(server.HasMember("address_strategy") && server["address_strategy"].IsString())
+                migrated.AddMember("domain_strategy",
+                                   rapidjson::Value(server["address_strategy"].GetString(), allocator), allocator);
+
+            if(migrated.HasMember("tag") && migrated["tag"].IsString())
+                dns_server_tags.emplace(migrated["tag"].GetString());
+            new_servers.PushBack(migrated, allocator);
+        }
+        dns["servers"].Swap(new_servers);
+    }
+    if(dns.HasMember("fakeip"))
+        dns.RemoveMember("fakeip");
+
+    if(dns.HasMember("rules") && dns["rules"].IsArray())
+    {
+        rapidjson::Value new_rules(rapidjson::kArrayType);
+        for(auto &rule : dns["rules"].GetArray())
+        {
+            if(!rule.IsObject())
+                continue;
+
+            const bool has_legacy_outbound = rule.HasMember("outbound");
+            const bool has_legacy_geosite = rule.HasMember("geosite");
+            const bool has_legacy_geoip = rule.HasMember("geoip") || rule.HasMember("source_geoip");
+            const bool has_invalid_server =
+                rule.HasMember("server") && rule["server"].IsString() &&
+                !dns_server_tags.contains(rule["server"].GetString());
+            if(has_legacy_outbound || has_legacy_geosite || has_legacy_geoip || has_invalid_server)
+            {
+                writeLog(0, "Drop deprecated DNS rule for sing-box " + singbox_version + ".", LOG_LEVEL_WARNING);
+                continue;
+            }
+
+            rapidjson::Value migrated_rule(rapidjson::kObjectType);
+            migrated_rule.CopyFrom(rule, allocator);
+            if(migrated_rule.HasMember("server") && !migrated_rule.HasMember("action"))
+                migrated_rule.AddMember("action", "route", allocator);
+            new_rules.PushBack(migrated_rule, allocator);
+        }
+        dns["rules"].Swap(new_rules);
+    }
+
+    if(!json.HasMember("route") || !json["route"].IsObject())
+        json.AddMember("route", rapidjson::Value(rapidjson::kObjectType), allocator);
+    auto &route = json["route"];
+    if(!route.HasMember("default_domain_resolver") && dns_server_tags.contains("dns_resolver"))
+        route.AddMember("default_domain_resolver", "dns_resolver", allocator);
+}
+
 static rapidjson::Value buildSingBoxTransport(const Proxy &proxy, rapidjson::MemoryPoolAllocator<> &allocator) {
     rapidjson::Value transport(rapidjson::kObjectType);
     switch (hash_(proxy.TransferProtocol)) {
@@ -3228,6 +3472,7 @@ std::string proxyToSingBox(std::vector<Proxy> &nodes, const std::string &base_co
                         std::string(rapidjson::GetParseError_En(json.GetParseError())), LOG_LEVEL_ERROR);
             return "";
         }
+        migrateLegacyDnsForSingBox(json, ext.singbox_version);
     } else {
         json.SetObject();
     }
