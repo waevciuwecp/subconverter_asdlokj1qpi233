@@ -144,5 +144,6 @@ assert_contains_fixed "$out_v114" "\"outbounds\":[\"awesome-node\",\"relay-node\
 assert_contains_fixed "$out_v111" "\"outbounds\":[\"dialer-select\",\"dialer-lb\",\"DIRECT\"]"
 assert_contains_fixed "$out_v114" "\"outbounds\":[\"dialer-select\",\"dialer-lb\",\"DIRECT\"]"
 assert_jq_true "$out_v114" '([.dns.servers[]? | select(.detour == "DIRECT")] | length) == 0'
+assert_jq_true "$out_v114" '(.ntp.detour // "") != "DIRECT"'
 
 echo "PASS: singbox dialer and versioned route action behavior is correct"

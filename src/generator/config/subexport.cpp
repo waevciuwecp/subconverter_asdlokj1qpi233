@@ -2940,6 +2940,22 @@ static void migrateLegacyDnsForSingBox(rapidjson::Document &json, const std::str
         route.AddMember("default_domain_resolver", "dns_resolver", allocator);
 }
 
+static void migrateLegacyNtpForSingBox(rapidjson::Document &json, const std::string &singbox_version)
+{
+    if(!singboxVerGreaterEqual(singbox_version, "1.12.0"))
+        return;
+    if(!json.HasMember("ntp") || !json["ntp"].IsObject())
+        return;
+
+    auto &ntp = json["ntp"];
+    if(ntp.HasMember("detour") && ntp["detour"].IsString())
+    {
+        const std::string detour = ntp["detour"].GetString();
+        if(detour == "DIRECT")
+            ntp.RemoveMember("detour");
+    }
+}
+
 static rapidjson::Value buildSingBoxTransport(const Proxy &proxy, rapidjson::MemoryPoolAllocator<> &allocator) {
     rapidjson::Value transport(rapidjson::kObjectType);
     switch (hash_(proxy.TransferProtocol)) {
@@ -3486,6 +3502,7 @@ std::string proxyToSingBox(std::vector<Proxy> &nodes, const std::string &base_co
             return "";
         }
         migrateLegacyDnsForSingBox(json, ext.singbox_version);
+        migrateLegacyNtpForSingBox(json, ext.singbox_version);
     } else {
         json.SetObject();
     }
