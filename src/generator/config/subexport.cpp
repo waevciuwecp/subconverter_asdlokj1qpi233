@@ -3402,7 +3402,10 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
             }
             proxy.AddMember("tls", tls, allocator);
         }
-        if (!udp.is_undef() && !udp) {
+        // Keep packet capability unless node itself explicitly disables UDP.
+        // A global udp=false is legacy behavior from other targets and causes
+        // urltest groups to have no packet-capable outbound in sing-box.
+        if (!x.UDP.is_undef() && !x.UDP) {
             proxy.AddMember("network", "tcp", allocator);
         }
         if (!tfo.is_undef()) {
