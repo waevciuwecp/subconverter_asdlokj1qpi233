@@ -85,6 +85,8 @@ jobs:
             --root . \
             --object-directory build-coverage \
             --filter 'src/' \
+            --exclude-unreachable-branches \
+            --exclude-throw-branches \
             --xml-pretty \
             --output coverage/coverage.xml \
             --txt coverage/coverage.txt \
