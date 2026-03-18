@@ -166,6 +166,7 @@ For Clash/ClashR/Singbox targets, the following advanced query parameters are av
 Sing-box compatibility notes:
 - `1.11.x` to `1.14.x` is supported explicitly.
 - For `>=1.13.0`, WireGuard **outbound** was removed upstream; WireGuard nodes are skipped in Sing-box output.
+- `detour` targets can point to dialer strategy outbounds (`selector` / `urltest`) by tag; this backend intentionally keeps `detour` pointing to the dialer group tag.
 
 `custom_proxy_group` also supports:
 

@@ -352,6 +352,7 @@ Sing-box 兼容性说明：
 
 - 显式支持 `1.11.x` 到 `1.14.x`。
 - 当版本 `>=1.13.0` 时，上游已移除 WireGuard outbound，转换到 Sing-box 时会跳过 WireGuard 节点。
+- `detour` 可按 tag 指向拨号策略出站（`selector` / `urltest`），本后端会保留该行为并将 `detour` 指向拨号组 tag。
 
 举个例子：
 
