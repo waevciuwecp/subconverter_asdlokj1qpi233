@@ -8,8 +8,10 @@
 #include "config/regmatch.h"
 #include "generator/config/subexport.h"
 #include "generator/template/templates.h"
+#include "handler/webget.h"
 #include "handler/settings.h"
 #include "parser/config/proxy.h"
+#include "parser/subparser.h"
 #include "script/script_quickjs.h"
 #include "utils/bitwise.h"
 #include "utils/file_extra.h"
@@ -237,6 +239,68 @@ static void groupGenerateFromProviders(const ProxyGroupConfig &group, std::vecto
     {
         // Keep provider-style regex semantics by mapping filter rules to source groups.
         groupGenerate("!!GROUP=" + rule, nodelist, filtered_nodelist, false, ext);
+    }
+}
+
+static string_array collectRequestedProvidersForSingBox(const ProxyGroupConfigs &groups, const extra_settings &ext)
+{
+    string_array requested;
+    for(const ProxyGroupConfig &group : groups)
+    {
+        if(group.UsingProvider.empty() && group.ProviderFilterRules.empty())
+            continue;
+        const string_array providers = resolveUsingProviders(group, ext);
+        for(const std::string &provider : providers)
+        {
+            if(std::find(requested.begin(), requested.end(), provider) == requested.end())
+                requested.emplace_back(provider);
+        }
+    }
+    return requested;
+}
+
+static void appendProviderNodesForSingBox(const ProxyGroupConfigs &groups, std::vector<Proxy> &nodes, extra_settings &ext)
+{
+    if(ext.clash_proxy_providers.empty())
+        return;
+
+    const string_array requested = collectRequestedProvidersForSingBox(groups, ext);
+    if(requested.empty())
+        return;
+
+    for(const std::string &provider_name : requested)
+    {
+        auto provider_it = std::find_if(ext.clash_proxy_providers.begin(), ext.clash_proxy_providers.end(),
+                                        [&provider_name](const ClashProxyProviderConfig &provider)
+                                        {
+                                            return provider.Name == provider_name;
+                                        });
+        if(provider_it == ext.clash_proxy_providers.end() || provider_it->Url.empty())
+            continue;
+
+        std::string provider_content = webGet(provider_it->Url, "", global.cacheSubscription);
+        if(provider_content.empty())
+        {
+            writeLog(0, "Unable to fetch proxy provider '" + provider_name + "' for sing-box fallback.",
+                     LOG_LEVEL_WARNING);
+            continue;
+        }
+
+        std::vector<Proxy> provider_nodes;
+        if(!explodeConfContent(provider_content, provider_nodes))
+        {
+            writeLog(0, "Unable to parse proxy provider '" + provider_name + "' for sing-box fallback.",
+                     LOG_LEVEL_WARNING);
+            continue;
+        }
+
+        for(Proxy &node : provider_nodes)
+        {
+            // Remap to provider name so provider filter rules can resolve via !!GROUP matcher.
+            node.Group = provider_name;
+            node.GroupId = 0;
+        }
+        std::move(provider_nodes.begin(), provider_nodes.end(), std::back_inserter(nodes));
     }
 }
 
@@ -2693,6 +2757,7 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                std::vector<RulesetContent> &ruleset_content_array,
                const ProxyGroupConfigs &extra_proxy_group, extra_settings &ext) {
     using namespace rapidjson_ext;
+    appendProviderNodesForSingBox(extra_proxy_group, nodes, ext);
     rapidjson::Document::AllocatorType &allocator = json.GetAllocator();
     rapidjson::Value outbounds(rapidjson::kArrayType), route(rapidjson::kArrayType);
     std::vector<Proxy> nodelist;
