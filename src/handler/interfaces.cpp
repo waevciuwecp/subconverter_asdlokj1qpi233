@@ -290,12 +290,6 @@ static bool decodePackedQuery(const std::string &packed, std::string &query)
     }
 
     std::string inflated;
-    if(inflatePackedQuery(content, inflated) && looksLikeQueryString(inflated))
-    {
-        query = inflated;
-        return true;
-    }
-
     std::string normalized = replaceAllDistinct(content, " ", "+");
     for(const std::string &candidate : {content, normalized})
     {
@@ -312,6 +306,13 @@ static bool decodePackedQuery(const std::string &packed, std::string &query)
             query = inflated;
             return true;
         }
+    }
+
+    // Compatibility fallback for rare callers that pass raw deflate bytes.
+    if(inflatePackedQuery(content, inflated) && looksLikeQueryString(inflated))
+    {
+        query = inflated;
+        return true;
     }
     return false;
 }
@@ -1166,6 +1167,13 @@ std::string digestSubconverter(RESPONSE_CALLBACK_ARGS) {
     {
         response.status_code = 400;
         return "Invalid request! q is missing or malformed.";
+    }
+
+    std::string alias = getUrlArg(argument, "a");
+    if(!alias.empty())
+    {
+        argument.erase("filename");
+        argument.emplace("filename", std::move(alias));
     }
 
     Request digest_request = request;

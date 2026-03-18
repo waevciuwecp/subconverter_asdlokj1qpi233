@@ -132,13 +132,15 @@ Use `/digest` for packed query strings:
 http://127.0.0.1:25500/digest?a=<alias>&q=<packed_query>
 ```
 
-- `a`: human-readable alias only (ignored by parser logic).
+- `a`: digest alias. In `/digest`, this value overrides `filename`.
 - `q`: packed request parameters.
+  - recommended: deflate payload (prefer `deflateRaw`) encoded with base64/base64url
   - plain query string (`target=...&url=...`)
   - base64/base64url encoded query string
   - pako deflate payload (zlib/raw/gzip) encoded with base64/base64url
 
 If normal parameters are also present in URL, they take precedence over values decoded from `q`.
+For filename selection in `/digest`, priority is: `a` > `filename`.
 
 `/sub` keeps the original plain-parameter behavior.
 
