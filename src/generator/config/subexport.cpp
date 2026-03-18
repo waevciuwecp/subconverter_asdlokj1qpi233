@@ -278,7 +278,11 @@ static void appendProviderNodesForSingBox(const ProxyGroupConfigs &groups, std::
         if(provider_it == ext.clash_proxy_providers.end() || provider_it->Url.empty())
             continue;
 
-        std::string provider_content = webGet(provider_it->Url, "", global.cacheSubscription);
+        string_icase_map request_headers;
+        // Some upstream provider endpoints reject empty User-Agent and return 5xx.
+        request_headers["User-Agent"] = "curl/8.7.1";
+        std::string provider_content = webGet(provider_it->Url, "", global.cacheSubscription, nullptr,
+                                              &request_headers, true);
         if(provider_content.empty())
         {
             writeLog(0, "Unable to fetch proxy provider '" + provider_name + "' for sing-box fallback.",

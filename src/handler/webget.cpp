@@ -178,8 +178,11 @@ static int curlGet(const FetchArgument &argument, FetchResult &result)
         if(!argument.request_headers->contains("User-Agent"))
             curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, user_agent_str);
     }
-    header_list = curl_slist_append(header_list, "SubConverter-Request: 1");
-    header_list = curl_slist_append(header_list, "SubConverter-Version: " VERSION);
+    if(!argument.omit_subconverter_headers)
+    {
+        header_list = curl_slist_append(header_list, "SubConverter-Request: 1");
+        header_list = curl_slist_append(header_list, "SubConverter-Version: " VERSION);
+    }
     if(header_list)
         curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, header_list);
 
@@ -297,12 +300,15 @@ std::string buildSocks5ProxyString(const std::string &addr, int port, const std:
     return proxystr;
 }
 
-std::string webGet(const std::string &url, const std::string &proxy, unsigned int cache_ttl, std::string *response_headers, string_icase_map *request_headers)
+std::string webGet(const std::string &url, const std::string &proxy, unsigned int cache_ttl,
+                   std::string *response_headers, string_icase_map *request_headers,
+                   bool omit_subconverter_headers)
 {
     int return_code = 0;
     std::string content;
 
-    FetchArgument argument {HTTP_GET, url, proxy, nullptr, request_headers, nullptr, cache_ttl};
+    FetchArgument argument {HTTP_GET, url, proxy, nullptr, request_headers, nullptr, cache_ttl, false,
+                            omit_subconverter_headers};
     FetchResult fetch_res {&return_code, &content, response_headers, nullptr};
 
     if (startsWith(url, "data:"))
