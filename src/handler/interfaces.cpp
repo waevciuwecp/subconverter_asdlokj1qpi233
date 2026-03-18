@@ -1,9 +1,12 @@
 #include <iostream>
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <limits>
 #include <string>
 #include <mutex>
 #include <numeric>
+#include <unordered_map>
 #include <unordered_set>
 #include <zlib.h>
 
@@ -276,6 +279,108 @@ static bool inflatePackedQuery(const std::string &packed, std::string &query)
     return false;
 }
 
+struct DigestCompactBoolSpec
+{
+    const char *key;
+    bool default_value;
+};
+
+static const std::unordered_map<std::string, std::string> gDigestCompactAliasMap = {
+    {"t", "target"},
+    {"u", "url"},
+    {"c", "config"},
+    {"i", "include"},
+    {"e", "exclude"},
+    {"r", "rename"},
+    {"d", "dev_id"},
+    {"iv", "interval"},
+    {"p", "proxy_providers"},
+    {"v", "ver"},
+    {"dg", "dialer_group_name"},
+    {"da", "apply_dialer_to"}
+};
+
+static const std::array<DigestCompactBoolSpec, 17> gDigestCompactBoolSpecs = {{
+    {"insert", false},
+    {"emoji", true},
+    {"list", false},
+    {"xudp", false},
+    {"udp", false},
+    {"tfo", false},
+    {"expand", true},
+    {"scv", false},
+    {"fdn", false},
+    {"append_type", false},
+    {"tls13", false},
+    {"sort", false},
+    {"use_dialer", false},
+    {"new_name", true},
+    {"surge.doh", false},
+    {"clash.doh", false},
+    {"singbox.ipv6", false}
+}};
+
+static const std::string gDigestCompactDefaultConfig =
+    "https://raw.githubusercontent.com/YaoYinYing/AnyRelay/main/config/nodnsleak.ini";
+
+static bool isDigestCompactMode(const std::string &mode)
+{
+    if(mode.empty())
+        return false;
+    std::string lowered = toLower(mode);
+    return lowered == "1" || lowered == "true" || lowered == "yes";
+}
+
+static bool parseBase36Mask(const std::string &text, uint64_t &mask)
+{
+    mask = 0;
+    if(text.empty())
+        return true;
+    for(unsigned char raw_ch : text)
+    {
+        unsigned char ch = std::tolower(raw_ch);
+        uint64_t value = 0;
+        if(ch >= '0' && ch <= '9')
+            value = ch - '0';
+        else if(ch >= 'a' && ch <= 'z')
+            value = ch - 'a' + 10;
+        else
+            return false;
+        if(mask > (std::numeric_limits<uint64_t>::max() - value) / 36)
+            return false;
+        mask = mask * 36 + value;
+    }
+    return true;
+}
+
+static std::string expandDigestCompactAlias(const std::string &key, bool compact_mode)
+{
+    if(!compact_mode)
+        return key;
+    auto it = gDigestCompactAliasMap.find(key);
+    return it == gDigestCompactAliasMap.end() ? key : it->second;
+}
+
+static void applyDigestCompactDefaults(string_multimap &argument, uint64_t true_mask, uint64_t false_mask)
+{
+    for(size_t i = 0; i < gDigestCompactBoolSpecs.size(); i++)
+    {
+        const DigestCompactBoolSpec &spec = gDigestCompactBoolSpecs[i];
+        if(argument.find(spec.key) != argument.end())
+            continue;
+        uint64_t bit = uint64_t{1} << i;
+        bool value = spec.default_value;
+        if(true_mask & bit)
+            value = true;
+        else if(false_mask & bit)
+            value = false;
+        argument.emplace(spec.key, value ? "true" : "false");
+    }
+
+    if(argument.find("config") == argument.end())
+        argument.emplace("config", gDigestCompactDefaultConfig);
+}
+
 static bool decodePackedQuery(const std::string &packed, std::string &query)
 {
     std::string content = packed;
@@ -330,6 +435,8 @@ static bool mergePackedQueryArguments(string_multimap &argument)
     if(startsWith(query, "?"))
         query.erase(0, 1);
     string_array entries = split(query, "&");
+    std::vector<std::pair<std::string, std::string>> decoded_entries;
+    bool compact_mode = false;
     for(const std::string &entry : entries)
     {
         if(entry.empty())
@@ -341,9 +448,47 @@ static bool mergePackedQueryArguments(string_multimap &argument)
         value = urlDecode(value);
         if(key.empty() || key == "q")
             continue;
-        if(argument.find(key) == argument.end())
-            argument.emplace(std::move(key), std::move(value));
+        if(key == "m" && isDigestCompactMode(value))
+            compact_mode = true;
+        decoded_entries.emplace_back(std::move(key), std::move(value));
     }
+
+    uint64_t true_mask = 0;
+    uint64_t false_mask = 0;
+    for(auto &entry : decoded_entries)
+    {
+        const std::string &key = entry.first;
+        const std::string &value = entry.second;
+        if(compact_mode)
+        {
+            if(key == "m")
+                continue;
+            if(key == "bt")
+            {
+                uint64_t parsed = 0;
+                if(parseBase36Mask(value, parsed))
+                    true_mask = parsed;
+                continue;
+            }
+            if(key == "bf")
+            {
+                uint64_t parsed = 0;
+                if(parseBase36Mask(value, parsed))
+                    false_mask = parsed;
+                continue;
+            }
+        }
+
+        std::string expanded_key = expandDigestCompactAlias(key, compact_mode);
+        if(expanded_key.empty() || expanded_key == "q")
+            continue;
+        if(argument.find(expanded_key) == argument.end())
+            argument.emplace(std::move(expanded_key), value);
+    }
+
+    if(compact_mode)
+        applyDigestCompactDefaults(argument, true_mask, false_mask);
+
     return true;
 }
 

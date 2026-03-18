@@ -345,7 +345,7 @@ http://127.0.0.1:25500/sub?target=%TARGET%&url=%URL%&emoji=%EMOJI%····
 | apply_dialer_to | 可选 | awesome\|Scholar          | 当 `use_dialer=true` 时用于匹配节点名称的正则，命中的节点会写入 `dialer-proxy`。为空时表示应用到全部节点。                                                                                                                       |
 | proxy_providers | 可选 | %5B%7B%22name%22...%7D%5D | Clash `proxy-providers` 定义，内容为 URL 编码后的 JSON 数组（每项至少包含 `name` 与 `url`，可选 `type` `path` `interval`）。也可在外部 YAML/TOML 配置中使用 `custom.proxy_providers` / `custom.proxy-providers`。可与下方 `select-use` / `load-balance-use` 等策略组配合使用。                                      |
 | a             |  可选 | my-airport                | `/digest` 模式下的别名参数，同时作为文件名优先来源，会覆盖 `filename`。建议与 `q` 搭配使用。                                                                                                                                              |
-| q             |  可选 | eJx...                    | 打包后的查询参数，建议通过 `/digest` 接口传入。推荐使用 deflate（优先 `deflateRaw`）后再进行 base64/base64url 编码；同时兼容明文查询串（`target=...&url=...`）和 base64/base64url 明文编码。若 URL 上同时存在普通参数，则普通参数优先；文件名优先级为 `a` > `filename`。                                                   |
+| q             |  可选 | eJx...                    | 打包后的查询参数，建议通过 `/digest` 接口传入。推荐使用 deflate（优先 `deflateRaw`）后再进行 base64/base64url 编码；同时兼容明文查询串（`target=...&url=...`）和 base64/base64url 明文编码。支持紧凑模式 `m=1`（短键：`t/u/c/i/e/r/d/iv/p/v/dg/da`，布尔位图：`bt/bf`）。若 URL 上同时存在普通参数，则普通参数优先；文件名优先级为 `a` > `filename`，且全量参数名仍可手动编辑。                                                   |
 
 举个例子：
 

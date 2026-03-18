@@ -142,6 +142,14 @@ http://127.0.0.1:25500/digest?a=<alias>&q=<packed_query>
 If normal parameters are also present in URL, they take precedence over values decoded from `q`.
 For filename selection in `/digest`, priority is: `a` > `filename`.
 
+Compact digest mode (`m=1`) is supported in `q`:
+- Short aliases: `t->target`, `u->url`, `c->config`, `i->include`, `e->exclude`, `r->rename`, `d->dev_id`, `iv->interval`, `p->proxy_providers`, `v->ver`, `dg->dialer_group_name`, `da->apply_dialer_to`.
+- Boolean bitsets:
+  - `bt`: base36 bitmask for explicit `true`
+  - `bf`: base36 bitmask for explicit `false`
+  - bit order: `insert,emoji,list,xudp,udp,tfo,expand,scv,fdn,append_type,tls13,sort,use_dialer,new_name,surge.doh,clash.doh,singbox.ipv6`
+- Full-length keys are still accepted for manual editing and backward compatibility.
+
 `/sub` keeps the original plain-parameter behavior.
 
 ### Clash Dialer / Providers

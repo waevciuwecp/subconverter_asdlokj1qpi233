@@ -63,13 +63,18 @@ import zlib
 
 source = "ss://YWVzLTEyOC1nY206cHdk@1.1.1.1:8388#digest-test"
 query = "target=ss&url={}&filename=old-name".format(urllib.parse.quote(source, safe=""))
+compact_query = "m=1&t=ss&u={}&bf=2".format(urllib.parse.quote(source, safe=""))
 
 co = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
 raw = co.compress(query.encode("utf-8")) + co.flush()
+co2 = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
+raw_compact = co2.compress(compact_query.encode("utf-8")) + co2.flush()
 
 q_plain = query
 q_base64 = base64.urlsafe_b64encode(query.encode("utf-8")).decode("ascii").rstrip("=")
 q_deflate = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+q_compact = compact_query
+q_compact_deflate = base64.urlsafe_b64encode(raw_compact).decode("ascii").rstrip("=")
 
 def q(v):
     return "'" + v.replace("'", "'\"'\"'") + "'"
@@ -77,6 +82,8 @@ def q(v):
 print("Q_PLAIN=" + q(q_plain))
 print("Q_BASE64=" + q(q_base64))
 print("Q_DEFLATE=" + q(q_deflate))
+print("Q_COMPACT=" + q(q_compact))
+print("Q_COMPACT_DEFLATE=" + q(q_compact_deflate))
 PY
 )"
 
@@ -116,6 +123,8 @@ check_digest_ok() {
 check_digest_ok "plain_q" "$Q_PLAIN"
 check_digest_ok "base64_q" "$Q_BASE64"
 check_digest_ok "deflate_q" "$Q_DEFLATE"
+check_digest_ok "compact_q" "$Q_COMPACT"
+check_digest_ok "compact_deflate_q" "$Q_COMPACT_DEFLATE"
 
 bad_code="$(curl --noproxy '*' -sS -G "http://127.0.0.1:${port}/digest" \
   --data-urlencode "q=@@@@" \
