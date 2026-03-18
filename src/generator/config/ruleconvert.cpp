@@ -594,6 +594,26 @@ void rulesetToSingBox(rapidjson::Document &base_rule, std::vector<RulesetContent
             rules.Swap(base_rule["route"]["rules"]);
     }
 
+    if(singBoxVerGreaterEqual(singbox_version, "1.12.0"))
+    {
+        auto sniff_rule = buildObject(allocator, "action", "sniff");
+        rapidjson::Value sniff_inbounds(rapidjson::kArrayType);
+        sniff_inbounds.PushBack("tun-in", allocator);
+        sniff_inbounds.PushBack("mixed-in", allocator);
+        sniff_rule.AddMember("inbound", sniff_inbounds, allocator);
+        rules.PushBack(sniff_rule, allocator);
+
+        auto hijack_dns_rule = buildObject(allocator, "type", "logical", "mode", "or", "action", "hijack-dns");
+        rapidjson::Value hijack_dns_items(rapidjson::kArrayType);
+        rapidjson::Value port_rule(rapidjson::kObjectType);
+        port_rule.AddMember("port", 53, allocator);
+        auto protocol_rule = buildObject(allocator, "protocol", "dns");
+        hijack_dns_items.PushBack(port_rule, allocator);
+        hijack_dns_items.PushBack(protocol_rule, allocator);
+        hijack_dns_rule.AddMember("rules", hijack_dns_items, allocator);
+        rules.PushBack(hijack_dns_rule, allocator);
+    }
+
     if (global.singBoxAddClashModes)
     {
         auto global_object = buildObject(allocator, "clash_mode", "Global", "outbound", "GLOBAL");
