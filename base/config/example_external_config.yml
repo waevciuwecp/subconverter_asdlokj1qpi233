@@ -2,10 +2,11 @@ custom:
   enable_rule_generator: false
   overwrite_original_rules: false
 
-  # Dialer options (Clash / ClashR target)
+  # Dialer options (Clash / ClashR / Singbox target)
   # use_dialer: true
   # dialer_group_name: dialer
   # apply_dialer_to: "awesome|Scholar"
+  # singbox_version: "1.11.0"
   #
   # Clash proxy-providers can be defined here (same as URL parameter `proxy_providers`)
   # proxy_providers:

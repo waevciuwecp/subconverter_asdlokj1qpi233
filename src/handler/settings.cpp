@@ -1262,6 +1262,7 @@ int loadExternalYAML(YAML::Node &node, ExternalConfig &ext)
         ext.use_dialer = safe_as<bool>(section["use_dialer"]);
     section["dialer_group_name"] >> ext.dialer_group_name;
     section["apply_dialer_to"] >> ext.apply_dialer_to;
+    section["singbox_version"] >> ext.singbox_version;
 
     const char *providers_name = section["proxy_providers"].IsDefined() ? "proxy_providers" : "proxy-providers";
     if(section[providers_name].IsDefined() &&
@@ -1307,7 +1308,8 @@ int loadExternalTOML(toml::value &root, ExternalConfig &ext)
                   "exclude_remarks", ext.exclude,
                   "use_dialer", ext.use_dialer,
                   "dialer_group_name", ext.dialer_group_name,
-                  "apply_dialer_to", ext.apply_dialer_to
+                  "apply_dialer_to", ext.apply_dialer_to,
+                  "singbox_version", ext.singbox_version
     );
 
     const toml::value *providers = nullptr;

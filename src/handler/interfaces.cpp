@@ -118,6 +118,19 @@ bool verGreaterEqual(const std::string &src_ver, const std::string &target_ver) 
     return !bool(target_stream >> target_part);
 }
 
+static bool normalizeVersion(std::string version, std::string &normalized)
+{
+    version = trim(version);
+    if(version.empty())
+        return false;
+    if(version[0] == 'v' || version[0] == 'V')
+        version.erase(0, 1);
+    if(!regMatch(version, "^[0-9]+(\\.[0-9]+){0,2}$"))
+        return false;
+    normalized = version;
+    return true;
+}
+
 void matchUserAgent(const std::string &user_agent, std::string &target, tribool &clash_new_name, int &surge_ver) {
     if (user_agent.empty())
         return;
@@ -296,6 +309,7 @@ static const std::unordered_map<std::string, std::string> gDigestCompactAliasMap
     {"iv", "interval"},
     {"p", "proxy_providers"},
     {"v", "ver"},
+    {"sv", "singbox_ver"},
     {"dg", "dialer_group_name"},
     {"da", "apply_dialer_to"}
 };
@@ -654,9 +668,10 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     auto &argument = request.argument;
     int *status_code = &response.status_code;
 
-    std::string argTarget = getUrlArg(argument, "target"), argSurgeVer = getUrlArg(argument, "ver");
+    std::string argTarget = getUrlArg(argument, "target"), argVer = getUrlArg(argument, "ver");
     tribool argClashNewField = getUrlArg(argument, "new_name");
-    int intSurgeVer = !argSurgeVer.empty() ? to_int(argSurgeVer, 3) : 3;
+    int intSurgeVer = !argVer.empty() ? to_int(argVer, 3) : 3;
+    std::string argSurgeVer = std::to_string(intSurgeVer);
     if (argTarget == "auto")
         matchUserAgent(request.headers["User-Agent"], argTarget, argClashNewField, intSurgeVer);
 
@@ -703,6 +718,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     std::string argRenames = getUrlArg(argument, "rename"), argFilterScript = getUrlArg(argument, "filter_script");
     std::string argDialerGroupName = getUrlArg(argument, "dialer_group_name");
     std::string argApplyDialerTo = getUrlArg(argument, "apply_dialer_to");
+    std::string argSingBoxVer = getUrlArg(argument, "singbox_ver");
     std::string argProxyProviders = getUrlArg(argument, "proxy_providers");
 
     /// switches with default value
@@ -719,6 +735,8 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         "classic"), argTLS13 = getUrlArg(
         argument, "tls13");
     tribool argUseDialer = getUrlArg(argument, "use_dialer");
+    if(argTarget == "singbox" && argSingBoxVer.empty() && !argVer.empty())
+        argSingBoxVer = argVer;
 
     std::string base_content, output_content;
     ProxyGroupConfigs lCustomProxyGroups = global.customProxyGroups;
@@ -784,7 +802,10 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         req_arg_map[x.first] = x.second;
     }
     req_arg_map["target"] = argTarget;
-    req_arg_map["ver"] = std::to_string(intSurgeVer);
+    if(argTarget == "surge")
+        req_arg_map["ver"] = std::to_string(intSurgeVer);
+    else if(!argVer.empty())
+        req_arg_map["ver"] = argVer;
 
     /// save template variables
     template_args tpl_args;
@@ -892,6 +913,8 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
             argDialerGroupName = extconf.dialer_group_name;
         if(argApplyDialerTo.empty())
             argApplyDialerTo = extconf.apply_dialer_to;
+        if(argTarget == "singbox" && argSingBoxVer.empty())
+            argSingBoxVer = extconf.singbox_version;
         if(ext.clash_proxy_providers.empty() && !extconf.clash_proxy_providers.empty())
             ext.clash_proxy_providers = extconf.clash_proxy_providers;
     }
@@ -899,6 +922,23 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     {
         *status_code = 400;
         return "Invalid apply_dialer_to regex!";
+    }
+    if(argTarget == "singbox")
+    {
+        if(argSingBoxVer.empty())
+            argSingBoxVer = "1.10.0";
+        std::string normalized_singbox_ver;
+        if(!normalizeVersion(argSingBoxVer, normalized_singbox_ver))
+        {
+            *status_code = 400;
+            return "Invalid singbox_ver!";
+        }
+        argSingBoxVer = normalized_singbox_ver;
+        ext.singbox_version = argSingBoxVer;
+        ext.singbox_use_route_action = verGreaterEqual(argSingBoxVer, "1.11.0");
+        tpl_args.request_params["singbox_ver"] = argSingBoxVer;
+        tpl_args.request_params["singbox.ver"] = argSingBoxVer;
+        tpl_args.request_params["singbox.route_action"] = ext.singbox_use_route_action ? "1" : "0";
     }
 
     if (ext.enable_rule_generator && !ext.nodelist && !lSimpleSubscription) {

@@ -143,7 +143,7 @@ If normal parameters are also present in URL, they take precedence over values d
 For filename selection in `/digest`, priority is: `a` > `filename`.
 
 Compact digest mode (`m=1`) is supported in `q`:
-- Short aliases: `t->target`, `u->url`, `c->config`, `i->include`, `e->exclude`, `r->rename`, `d->dev_id`, `iv->interval`, `p->proxy_providers`, `v->ver`, `dg->dialer_group_name`, `da->apply_dialer_to`.
+- Short aliases: `t->target`, `u->url`, `c->config`, `i->include`, `e->exclude`, `r->rename`, `d->dev_id`, `iv->interval`, `p->proxy_providers`, `v->ver`, `sv->singbox_ver`, `dg->dialer_group_name`, `da->apply_dialer_to`.
 - Boolean bitsets:
   - `bt`: base36 bitmask for explicit `true`
   - `bf`: base36 bitmask for explicit `false`
@@ -152,13 +152,15 @@ Compact digest mode (`m=1`) is supported in `q`:
 
 `/sub` keeps the original plain-parameter behavior.
 
-### Clash Dialer / Providers
+### Dialer / Providers
 
-For Clash/ClashR targets, the following advanced query parameters are available:
+For Clash/ClashR/Singbox targets, the following advanced query parameters are available:
 
-- `use_dialer=true|false`: enable writing `dialer-proxy` for matched nodes.
+- `use_dialer=true|false`: enable writing dialer fields for matched nodes (`dialer-proxy` for Clash/ClashR, `detour` for Singbox).
 - `dialer_group_name=<name>`: dialer group name (default: `dialer`).
 - `apply_dialer_to=<regex>`: apply dialer only to node remarks matching this regex (empty = all nodes).
+- `singbox_ver=<version>`: explicit sing-box config version (for example `1.10.0`, `1.11.0`, `1.13.0`). For `>=1.11.0`, generated route rules include `action: route`. Default is `1.10.0`.
+- `ver=<version>`: when `target=singbox`, `ver` is accepted as a fallback for `singbox_ver`.
 - `proxy_providers=<urlencoded-json-array>`: inject Clash `proxy-providers` from request input.
 
 `custom_proxy_group` also supports:

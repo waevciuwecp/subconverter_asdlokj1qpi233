@@ -537,7 +537,7 @@ static void appendSingBoxRule(std::vector<std::string_view> &args, rapidjson::Va
     rules | AppendToArray(realType.c_str(), rapidjson::Value(value.c_str(), value.size(), allocator), allocator);
 }
 
-void rulesetToSingBox(rapidjson::Document &base_rule, std::vector<RulesetContent> &ruleset_content_array, bool overwrite_original_rules)
+void rulesetToSingBox(rapidjson::Document &base_rule, std::vector<RulesetContent> &ruleset_content_array, bool overwrite_original_rules, bool use_route_action)
 {
     using namespace rapidjson_ext;
     std::string rule_group, retrieved_rules, strLine, final;
@@ -556,6 +556,11 @@ void rulesetToSingBox(rapidjson::Document &base_rule, std::vector<RulesetContent
     {
         auto global_object = buildObject(allocator, "clash_mode", "Global", "outbound", "GLOBAL");
         auto direct_object = buildObject(allocator, "clash_mode", "Direct", "outbound", "DIRECT");
+        if(use_route_action)
+        {
+            global_object.AddMember("action", "route", allocator);
+            direct_object.AddMember("action", "route", allocator);
+        }
         rules.PushBack(global_object, allocator);
         rules.PushBack(direct_object, allocator);
     }
@@ -612,6 +617,8 @@ void rulesetToSingBox(rapidjson::Document &base_rule, std::vector<RulesetContent
             appendSingBoxRule(temp, rule, strLine, allocator);
         }
         if (rule.ObjectEmpty()) continue;
+        if(use_route_action)
+            rule.AddMember("action", "route", allocator);
         rule.AddMember("outbound", rapidjson::Value(rule_group.c_str(), allocator), allocator);
         rules.PushBack(rule, allocator);
     }

@@ -3008,6 +3008,9 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
         if (!tfo.is_undef()) {
             proxy.AddMember("tcp_fast_open", buildBooleanValue(tfo), allocator);
         }
+        if (!x.UnderlyingProxy.empty()) {
+            proxy.AddMember("detour", rapidjson::Value(x.UnderlyingProxy.c_str(), allocator), allocator);
+        }
         nodelist.push_back(x);
         remarks_list.emplace_back(x.Remark);
         outbounds.PushBack(proxy, allocator);
@@ -3099,7 +3102,7 @@ std::string proxyToSingBox(std::vector<Proxy> &nodes, const std::string &base_co
     if (ext.nodelist || !ext.enable_rule_generator)
         return json | SerializeObject();
 
-    rulesetToSingBox(json, ruleset_content_array, ext.overwrite_original_rules);
+    rulesetToSingBox(json, ruleset_content_array, ext.overwrite_original_rules, ext.singbox_use_route_action);
 
     return json | SerializeObject();
 }

@@ -100,6 +100,7 @@ struct ExternalConfig
     tribool use_dialer;
     std::string dialer_group_name;
     std::string apply_dialer_to;
+    std::string singbox_version;
     std::vector<ClashProxyProviderConfig> clash_proxy_providers;
 };
 
