@@ -99,6 +99,15 @@ assert_not_contains_fixed() {
   fi
 }
 
+assert_jq_true() {
+  local path="$1"
+  local expr="$2"
+  if ! jq -e "$expr" "$path" >/dev/null; then
+    echo "expected jq expression to be true for $path: $expr" >&2
+    exit 1
+  fi
+}
+
 assert_non_empty "$out_v111"
 assert_non_empty "$out_v114"
 
@@ -134,5 +143,6 @@ assert_contains_fixed "$out_v111" "\"outbounds\":[\"awesome-node\",\"relay-node\
 assert_contains_fixed "$out_v114" "\"outbounds\":[\"awesome-node\",\"relay-node\"]"
 assert_contains_fixed "$out_v111" "\"outbounds\":[\"dialer-select\",\"dialer-lb\",\"DIRECT\"]"
 assert_contains_fixed "$out_v114" "\"outbounds\":[\"dialer-select\",\"dialer-lb\",\"DIRECT\"]"
+assert_jq_true "$out_v114" '([.dns.servers[]? | select(.detour == "DIRECT")] | length) == 0'
 
 echo "PASS: singbox dialer and versioned route action behavior is correct"

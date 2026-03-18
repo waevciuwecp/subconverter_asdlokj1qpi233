@@ -2879,7 +2879,12 @@ static void migrateLegacyDnsForSingBox(rapidjson::Document &json, const std::str
                 migrated.AddMember("inet6_range", rapidjson::Value(fakeip_v6.c_str(), allocator), allocator);
             }
             if(server.HasMember("detour") && server["detour"].IsString())
-                migrated.AddMember("detour", rapidjson::Value(server["detour"].GetString(), allocator), allocator);
+            {
+                const std::string detour = server["detour"].GetString();
+                // sing-box 1.12+ rejects detour to an empty direct outbound.
+                if(!detour.empty() && detour != "DIRECT")
+                    migrated.AddMember("detour", rapidjson::Value(detour.c_str(), allocator), allocator);
+            }
             if(server.HasMember("address_resolver") && server["address_resolver"].IsString())
                 migrated.AddMember("domain_resolver",
                                    rapidjson::Value(server["address_resolver"].GetString(), allocator), allocator);
