@@ -4,6 +4,7 @@
 //#include <mutex>
 #include <thread>
 #include <atomic>
+#include <cstring>
 
 #ifndef NO_WEBGET
 #include <curl/curl.h>
@@ -11,11 +12,13 @@
 #endif
 
 #include "handler/settings.h"
+#include "server/socket.h"
 #include "utils/base64/base64.h"
 #include "utils/defer.h"
 #include "utils/file_extra.h"
 #include "utils/lock.h"
 #include "utils/logger.h"
+#include "utils/network.h"
 #include "utils/urlencode.h"
 #include "webget.h"
 
@@ -31,6 +34,134 @@ std::mutex cache_rw_lock;
 */
 
 RWLock cache_rw_lock;
+
+static bool is_supported_remote_url(const std::string &url)
+{
+    return startsWith(url, "http://") || startsWith(url, "https://");
+}
+
+static bool extract_url_host(const std::string &url, std::string &host)
+{
+    const std::string::size_type scheme_pos = url.find("://");
+    if(scheme_pos == std::string::npos)
+        return false;
+    const std::string::size_type authority_start = scheme_pos + 3;
+    const std::string::size_type authority_end = url.find_first_of("/?#", authority_start);
+    std::string authority = authority_end == std::string::npos ? url.substr(authority_start) : url.substr(authority_start, authority_end - authority_start);
+    if(authority.empty())
+        return false;
+    const std::string::size_type at_pos = authority.rfind('@');
+    if(at_pos != std::string::npos)
+        authority.erase(0, at_pos + 1);
+    if(authority.empty())
+        return false;
+    if(authority.front() == '[')
+    {
+        const std::string::size_type close_pos = authority.find(']');
+        if(close_pos == std::string::npos)
+            return false;
+        host = authority.substr(1, close_pos - 1);
+        return !host.empty();
+    }
+    const std::string::size_type colon_pos = authority.rfind(':');
+    if(colon_pos != std::string::npos && authority.find(':') == colon_pos)
+        host = authority.substr(0, colon_pos);
+    else
+        host = authority;
+    return !host.empty();
+}
+
+static bool is_private_or_loopback_ipv4(const in_addr &addr)
+{
+    const uint32_t value = ntohl(addr.s_addr);
+    if((value & 0xFF000000u) == 0x0A000000u) // 10.0.0.0/8
+        return true;
+    if((value & 0xFF000000u) == 0x7F000000u) // 127.0.0.0/8
+        return true;
+    if((value & 0xFFF00000u) == 0xAC100000u) // 172.16.0.0/12
+        return true;
+    if((value & 0xFFFF0000u) == 0xC0A80000u) // 192.168.0.0/16
+        return true;
+    if((value & 0xFFFF0000u) == 0xA9FE0000u) // 169.254.0.0/16
+        return true;
+    if((value & 0xFFC00000u) == 0x64400000u) // 100.64.0.0/10
+        return true;
+    if((value & 0xFF000000u) == 0x00000000u) // 0.0.0.0/8
+        return true;
+    return false;
+}
+
+static bool is_private_or_loopback_ipv6(const in6_addr &addr)
+{
+    static const in6_addr loopback = IN6ADDR_LOOPBACK_INIT;
+    static const in6_addr any = IN6ADDR_ANY_INIT;
+    if(std::memcmp(&addr, &loopback, sizeof(in6_addr)) == 0)
+        return true;
+    if(std::memcmp(&addr, &any, sizeof(in6_addr)) == 0)
+        return true;
+    if((addr.s6_addr[0] & 0xFEu) == 0xFCu) // fc00::/7
+        return true;
+    if(addr.s6_addr[0] == 0xFEu && (addr.s6_addr[1] & 0xC0u) == 0x80u) // fe80::/10
+        return true;
+#ifdef IN6_IS_ADDR_V4MAPPED
+    if(IN6_IS_ADDR_V4MAPPED(&addr))
+    {
+        in_addr mapped {};
+        std::memcpy(&mapped, addr.s6_addr + 12, sizeof(mapped));
+        return is_private_or_loopback_ipv4(mapped);
+    }
+#endif
+    return false;
+}
+
+static bool should_block_private_address_request(const std::string &url)
+{
+    if(!global.blockPrivateAddressRequests || !is_supported_remote_url(url))
+        return false;
+    std::string host;
+    if(!extract_url_host(url, host))
+        return true;
+    const std::string host_lower = toLower(host);
+    if(host_lower == "localhost" || endsWith(host_lower, ".localhost"))
+        return true;
+    if(isIPv4(host))
+    {
+        in_addr addr {};
+        if(inet_pton(AF_INET, host.c_str(), &addr) == 1)
+            return is_private_or_loopback_ipv4(addr);
+        return true;
+    }
+    if(isIPv6(host))
+    {
+        in6_addr addr6 {};
+        if(inet_pton(AF_INET6, host.c_str(), &addr6) == 1)
+            return is_private_or_loopback_ipv6(addr6);
+        return true;
+    }
+    addrinfo hints {};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo *resolved = nullptr;
+    if(getaddrinfo(host.c_str(), nullptr, &hints, &resolved) != 0 || resolved == nullptr)
+        return false;
+    defer(freeaddrinfo(resolved);)
+    for(addrinfo *entry = resolved; entry != nullptr; entry = entry->ai_next)
+    {
+        if(entry->ai_family == AF_INET)
+        {
+            const auto *sock = reinterpret_cast<const sockaddr_in *>(entry->ai_addr);
+            if(sock && is_private_or_loopback_ipv4(sock->sin_addr))
+                return true;
+        }
+        else if(entry->ai_family == AF_INET6)
+        {
+            const auto *sock6 = reinterpret_cast<const sockaddr_in6 *>(entry->ai_addr);
+            if(sock6 && is_private_or_loopback_ipv6(sock6->sin6_addr))
+                return true;
+        }
+    }
+    return false;
+}
 
 #ifndef NO_WEBGET
 //std::string user_agent_str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36";
@@ -132,8 +263,8 @@ static inline void curl_set_common_options(CURL *curl_handle, const char *url, c
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_MAXREDIRS, 20L);
-    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, global.verifyOutboundTls ? 1L : 0L);
+    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, global.verifyOutboundTls ? 2L : 0L);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 15L);
     curl_easy_setopt(curl_handle, CURLOPT_COOKIEFILE, "");
     if(data)
@@ -331,6 +462,11 @@ std::string webGet(const std::string &url, const std::string &proxy, unsigned in
 
     if (startsWith(url, "data:"))
         return dataGet(url);
+    if(!is_supported_remote_url(url))
+    {
+        writeLog(0, "Unsupported URL scheme: '" + url + "'.", LOG_LEVEL_WARNING);
+        return "";
+    }
     // cache system
     if(cache_ttl > 0)
     {
@@ -433,5 +569,18 @@ string_array headers_map_to_array(const string_map &headers)
 
 int webGet(const FetchArgument& argument, FetchResult &result)
 {
+    if(should_block_private_address_request(argument.url))
+    {
+        writeLog(0, "Blocked outbound request to private/loopback target: '" + argument.url + "'.", LOG_LEVEL_WARNING);
+        if(result.status_code)
+            *result.status_code = 403;
+        if(result.content)
+            result.content->clear();
+        if(result.response_headers)
+            result.response_headers->clear();
+        if(result.cookies)
+            result.cookies->clear();
+        return result.status_code ? *result.status_code : 403;
+    }
     return curlGet(argument, result);
 }

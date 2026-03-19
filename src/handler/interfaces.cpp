@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <filesystem>
 #include <limits>
 #include <string>
 #include <mutex>
@@ -1017,7 +1018,8 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     parse_set.time_rules = &time_temp;
     parse_set.sub_info = &subInfo;
     parse_set.authorized = authorized;
-    parse_set.request_header = &request.headers;
+    parse_set.allow_request_scripts = global.allowRequestScripts;
+    parse_set.request_header = global.forwardClientHeaders ? &request.headers : nullptr;
 #ifndef NO_JS_RUNTIME
     parse_set.js_runtime = ext.js_runtime;
     parse_set.js_context = ext.js_context;
@@ -1087,7 +1089,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     }
     //run filter script
     std::string filterScript = global.filterScript;
-    if (authorized && !argFilterScript.empty())
+    if (authorized && global.allowRequestScripts && !argFilterScript.empty())
         filterScript = argFilterScript;
     if (!filterScript.empty()) {
         if (startsWith(filterScript, "path:"))
@@ -1515,7 +1517,7 @@ std::string surgeConfToClash(RESPONSE_CALLBACK_ARGS) {
     parse_set.proxy = &proxy;
     parse_set.exclude_remarks = parse_set.include_remarks = &dummy_str_array;
     parse_set.stream_rules = parse_set.time_rules = &dummy_regex_array;
-    parse_set.request_header = &request.headers;
+    parse_set.request_header = global.forwardClientHeaders ? &request.headers : nullptr;
     parse_set.sub_info = &subInfo;
     parse_set.authorized = !global.APIMode;
     for (std::string &x: links) {
@@ -1876,21 +1878,62 @@ int simpleGenerator() {
     return 0;
 }
 
+static bool isPathWithinScope(const std::filesystem::path &target, const std::filesystem::path &scope)
+{
+    auto target_it = target.begin();
+    auto scope_it = scope.begin();
+    while(scope_it != scope.end())
+    {
+        if(target_it == target.end() || *target_it != *scope_it)
+            return false;
+        ++target_it;
+        ++scope_it;
+    }
+    return true;
+}
+
 std::string renderTemplate(RESPONSE_CALLBACK_ARGS) {
     auto &argument = request.argument;
     int *status_code = &response.status_code;
 
-    std::string path = getUrlArg(argument, "path");
+    const std::string path = getUrlArg(argument, "path");
     writeLog(0, "Trying to render template '" + path + "'...", LOG_LEVEL_INFO);
+    if(path.empty())
+    {
+        *status_code = 400;
+        return "Invalid request";
+    }
+    if(global.templatePath.empty())
+    {
+        *status_code = 403;
+        return "Template rendering is disabled";
+    }
 
-    if (!startsWith(path, global.templatePath) || !fileExist(path)) {
+    std::error_code ec;
+    std::filesystem::path scope = std::filesystem::weakly_canonical(global.templatePath, ec);
+    if(ec || !std::filesystem::exists(scope) || !std::filesystem::is_directory(scope))
+    {
+        *status_code = 500;
+        return "Template scope is invalid";
+    }
+    std::filesystem::path requested = std::filesystem::weakly_canonical(path, ec);
+    if(ec || !std::filesystem::exists(requested) || !std::filesystem::is_regular_file(requested))
+    {
         *status_code = 404;
         return "Not found";
     }
-    std::string template_content = fetchFile(path, parseProxy(global.proxyConfig), global.cacheConfig);
+    scope = scope.lexically_normal();
+    requested = requested.lexically_normal();
+    if(!isPathWithinScope(requested, scope))
+    {
+        *status_code = 403;
+        return "Forbidden";
+    }
+
+    std::string template_content = fileGet(requested.string(), false);
     if (template_content.empty()) {
         *status_code = 400;
-        return "File empty or out of scope";
+        return "File empty or inaccessible";
     }
     template_args tpl_args;
     tpl_args.global_vars = global.templateVars;

@@ -29,6 +29,19 @@ struct ServeCacheGuard
     }
 };
 
+struct BlockPrivateAddrGuard
+{
+    bool old = global.blockPrivateAddressRequests;
+    explicit BlockPrivateAddrGuard(bool value)
+    {
+        global.blockPrivateAddressRequests = value;
+    }
+    ~BlockPrivateAddrGuard()
+    {
+        global.blockPrivateAddressRequests = old;
+    }
+};
+
 } // namespace
 
 TEST_CASE("webget buildSocks5ProxyString handles auth and no-auth")
@@ -43,6 +56,26 @@ TEST_CASE("webget data URL decoding is deterministic")
     CHECK(webGet("data:text/plain;base64,SGVsbG8=") == "Hello");
     CHECK(webGet("data:text/plain") == "");
     CHECK(webGet("data:text/plain,") == "");
+}
+
+TEST_CASE("webget rejects unsupported URL schemes")
+{
+    CHECK(webGet("file:///etc/passwd").empty());
+    CHECK(webGet("ftp://example.com/payload").empty());
+}
+
+TEST_CASE("webget blocks private and loopback destinations when enabled")
+{
+    BlockPrivateAddrGuard guard(true);
+
+    int status_code = 0;
+    std::string content = "placeholder";
+    FetchArgument arg {HTTP_GET, "http://127.0.0.1:65535/test", "", nullptr, nullptr, nullptr, 0, false};
+    FetchResult result {&status_code, &content, nullptr, nullptr};
+
+    CHECK(webGet(arg, result) == 403);
+    CHECK(status_code == 403);
+    CHECK(content.empty());
 }
 
 TEST_CASE("webget cache branches work without network when NO_WEBGET is enabled")

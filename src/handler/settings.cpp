@@ -689,6 +689,10 @@ void readYAMLConf(YAML::Node &node)
         node["advanced"]["script_clean_context"] >> global.scriptCleanContext;
         node["advanced"]["async_fetch_ruleset"] >> global.asyncFetchRuleset;
         node["advanced"]["skip_failed_links"] >> global.skipFailedLinks;
+        node["advanced"]["allow_request_scripts"] >> global.allowRequestScripts;
+        node["advanced"]["forward_client_headers"] >> global.forwardClientHeaders;
+        node["advanced"]["verify_outbound_tls"] >> global.verifyOutboundTls;
+        node["advanced"]["block_private_address_requests"] >> global.blockPrivateAddressRequests;
     }
     writeLog(0, "Load preference settings in YAML format completed.", LOG_LEVEL_INFO);
 }
@@ -866,7 +870,11 @@ void readTOMLConf(toml::value &root)
                   "cache_ruleset", cache_ruleset,
                   "script_clean_context", global.scriptCleanContext,
                   "async_fetch_ruleset", global.asyncFetchRuleset,
-                  "skip_failed_links", global.skipFailedLinks
+                  "skip_failed_links", global.skipFailedLinks,
+                  "allow_request_scripts", global.allowRequestScripts,
+                  "forward_client_headers", global.forwardClientHeaders,
+                  "verify_outbound_tls", global.verifyOutboundTls,
+                  "block_private_address_requests", global.blockPrivateAddressRequests
     );
 
     if(global.printDbgInfo)
@@ -1195,6 +1203,10 @@ void readConf()
     ini.get_bool_if_exist("script_clean_context", global.scriptCleanContext);
     ini.get_bool_if_exist("async_fetch_ruleset", global.asyncFetchRuleset);
     ini.get_bool_if_exist("skip_failed_links", global.skipFailedLinks);
+    ini.get_bool_if_exist("allow_request_scripts", global.allowRequestScripts);
+    ini.get_bool_if_exist("forward_client_headers", global.forwardClientHeaders);
+    ini.get_bool_if_exist("verify_outbound_tls", global.verifyOutboundTls);
+    ini.get_bool_if_exist("block_private_address_requests", global.blockPrivateAddressRequests);
 
     writeLog(0, "Load preference settings in INI format completed.", LOG_LEVEL_INFO);
 }

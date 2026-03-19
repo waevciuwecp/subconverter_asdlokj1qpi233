@@ -1,6 +1,6 @@
 common:
-  api_mode: false
-  api_access_token: password
+  api_mode: true
+  api_access_token: change-this-token
   default_url: []
   enable_insert: true
   insert_url: []
@@ -103,7 +103,7 @@ proxy_groups:
   - {import: snippets/groups.txt}
 
 template:
-  template_path: ""
+  template_path: "templates"
   globals:
   - {key: clash.http_port, value: 7890}
   - {key: clash.socks_port, value: 7891}
@@ -138,7 +138,7 @@ tasks:
 #    timeout: 3
 
 server:
-  listen: 0.0.0.0
+  listen: 127.0.0.1
   port: 25500
   serve_file_root: ""
 
@@ -157,3 +157,7 @@ advanced:
   script_clean_context: true
   async_fetch_ruleset: false
   skip_failed_links: false
+  allow_request_scripts: false
+  forward_client_headers: false
+  verify_outbound_tls: true
+  block_private_address_requests: true

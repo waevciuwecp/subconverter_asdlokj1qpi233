@@ -68,6 +68,10 @@ struct Settings
     //limits
     size_t maxAllowedRulesets = 64, maxAllowedRules = 32768;
     bool scriptCleanContext = false;
+    bool allowRequestScripts = false;
+    bool forwardClientHeaders = false;
+    bool verifyOutboundTls = true;
+    bool blockPrivateAddressRequests = true;
 
     //cron system
     bool enableCron = false;

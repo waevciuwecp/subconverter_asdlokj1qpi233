@@ -52,7 +52,7 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
 
     /// script:filepath,arg1,arg2,...
 #ifndef NO_JS_RUNTIME
-    if(authorized) script_safe_runner(parse_set.js_runtime, parse_set.js_context, [&](qjs::Context &ctx)
+    if(authorized && parse_set.allow_request_scripts) script_safe_runner(parse_set.js_runtime, parse_set.js_context, [&](qjs::Context &ctx)
     {
         if(startsWith(link, "script:")) /// process subscription with script
         {
