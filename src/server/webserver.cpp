@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <sstream>
 
 #include "utils/file.h"
@@ -30,6 +31,12 @@ static string_array parse_ua_block_keywords(const std::string &content)
         keywords.emplace_back(toLower(line));
     }
     return keywords;
+}
+
+static void dedupe_ua_block_keywords(string_array &keywords)
+{
+    std::sort(keywords.begin(), keywords.end());
+    keywords.erase(std::unique(keywords.begin(), keywords.end()), keywords.end());
 }
 } // namespace
 
@@ -68,6 +75,7 @@ void WebServer::reload_ua_block_keywords_if_needed_locked()
     }
 
     auto new_keywords = parse_ua_block_keywords(content);
+    dedupe_ua_block_keywords(new_keywords);
     ua_block_keywords_missing_warned = false;
     if (loaded_from != ua_block_keywords_loaded_from || new_keywords != ua_block_keywords)
     {

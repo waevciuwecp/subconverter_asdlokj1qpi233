@@ -47,6 +47,8 @@ micromessenger
     CHECK(server.is_user_agent_blocked("Mozilla/5.0 MicroMessenger/7.0.12.1620", &matched_keyword));
     CHECK(matched_keyword == "micromessenger");
 
+    CHECK(server.is_user_agent_blocked("Mozilla/5.0 (Linux; Android 14; M2102K1C Build/UKQ1.240624.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 Mobile Safari/537.36 XWEB/1420273 MMWEBSDK/20260101 MMWEBID/3026 REV/04f9d4e638f33b1909b8f293dffa1cf978d8d0a3 MicroMessenger/8.0.68.3020(0x28004458) WeChat/arm64 Weixin NetType/4G Language/zh_CN ABI/arm64", &matched_keyword));
+
     CHECK_FALSE(server.is_user_agent_blocked("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Safari/537.36", &matched_keyword));
 
     fs::remove_all(temp_dir);
@@ -57,4 +59,13 @@ TEST_CASE("webserver ua blocker can be disabled")
     WebServer server;
     server.ua_block_enabled = false;
     CHECK_FALSE(server.is_user_agent_blocked("Mozilla/5.0 (Linux; Android 10; HMA-AL00)"));
+}
+
+TEST_CASE("webserver ua blocker has no active patterns when keyword file is missing")
+{
+    WebServer server;
+    server.ua_block_enabled = true;
+    server.ua_block_keywords_path = "/tmp/subconverter_keyword_file_does_not_exist.list";
+
+    CHECK_FALSE(server.is_user_agent_blocked("Mozilla/5.0 (Linux; Android 14; M2102K1C Build/UKQ1.240624.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 Mobile Safari/537.36 XWEB/1420273 MMWEBSDK/20260101 MMWEBID/3026 REV/04f9d4e638f33b1909b8f293dffa1cf978d8d0a3 MicroMessenger/8.0.68.3020(0x28004458) WeChat/arm64 Weixin NetType/4G Language/zh_CN ABI/arm64"));
 }
