@@ -102,6 +102,23 @@ int serveFile(WebServer *server, const std::string &filename, std::string &conte
 }
 
 const char *request_header_blacklist[] = {"host", "accept", "accept-encoding"};
+static const char *fake_nginx_index_page =
+    "<!DOCTYPE html>\n"
+    "<html>\n"
+    "<head>\n"
+    "<title>Welcome to nginx!</title>\n"
+    "<style>\n"
+    "body { width: 35em; margin: 0 auto; font-family: Tahoma, Verdana, Arial, sans-serif; }\n"
+    "</style>\n"
+    "</head>\n"
+    "<body>\n"
+    "<h1>Welcome to nginx!</h1>\n"
+    "<p>If you see this page, the nginx web server is successfully installed and working.</p>\n"
+    "<p>Further configuration is required.</p>\n"
+    "<p>For online documentation and support please refer to <a href=\"http://nginx.org/\">nginx.org</a>.</p>\n"
+    "<p><em>Thank you for using nginx.</em></p>\n"
+    "</body>\n"
+    "</html>\n";
 
 static inline void buffer_cleanup(struct evbuffer *eb)
 {
@@ -193,6 +210,7 @@ static void on_request(evhttp_request *req, void *args)
     static std::string auth_token = "Basic " + base64Encode(server->auth_user + ":" + server->auth_password);
     const char *req_content_type = evhttp_find_header(req->input_headers, "Content-Type"), *req_ac_method = evhttp_find_header(req->input_headers, "Access-Control-Request-Method");
     const char *uri = req->uri, *internal_flag = evhttp_find_header(req->input_headers, "SubConverter-Request");
+    const char *user_agent = evhttp_find_header(req->input_headers, "User-Agent");
 
     char *client_ip;
     u_short client_port;
@@ -203,6 +221,18 @@ static void on_request(evhttp_request *req, void *args)
     if (internal_flag != nullptr)
     {
         evhttp_send_error(req, 500, "Loop request detected!");
+        return;
+    }
+    std::string matched_keyword;
+    if (server->is_user_agent_blocked(user_agent == nullptr ? "" : user_agent, &matched_keyword))
+    {
+        writeLog(0, "Rejected request from client " + std::string(client_ip) + ":" + std::to_string(client_port) + " due to blocked User-Agent keyword '" + matched_keyword + "'.", LOG_LEVEL_WARNING);
+        auto buffer = evhttp_request_get_output_buffer(req);
+        evhttp_add_header(req->output_headers, "Server", "nginx");
+        evhttp_add_header(req->output_headers, "Content-Type", "text/html");
+        evbuffer_add(buffer, fake_nginx_index_page, strlen(fake_nginx_index_page));
+        evhttp_send_reply(req, 200, nullptr, buffer);
+        buffer_cleanup(buffer);
         return;
     }
 

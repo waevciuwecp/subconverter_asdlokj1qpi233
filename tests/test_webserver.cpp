@@ -1,0 +1,60 @@
+#include <doctest/doctest.h>
+
+#include <chrono>
+#include <filesystem>
+#include <string>
+
+#include "utils/file.h"
+#include "server/webserver.h"
+
+TEST_CASE("webserver ua blocker matches brand and sensitive app keywords")
+{
+    namespace fs = std::filesystem;
+
+    const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+    const fs::path temp_dir = fs::temp_directory_path() / ("subconverter_webserver_ut_" + std::to_string(now));
+    fs::create_directories(temp_dir);
+    const fs::path keywords_path = temp_dir / "ua_keywords.list";
+
+    const std::string keywords = R"(# comments and empty lines are ignored
+
+huawei
+miuibrowser
+ucbrowser
+baiduboxapp
+micromessenger
+)";
+    REQUIRE(fileWrite(keywords_path.string(), keywords, true) == 0);
+
+    WebServer server;
+    server.ua_block_keywords_path = keywords_path.string();
+    server.ua_block_enabled = true;
+
+    std::string matched_keyword;
+
+    CHECK(server.is_user_agent_blocked("Mozilla/5.0 (Linux; Android 10; HMA-AL00 Build/HUAWEIHMA-AL00) Safari/537.36", &matched_keyword));
+    CHECK(matched_keyword == "huawei");
+
+    CHECK(server.is_user_agent_blocked("Mozilla/5.0 XiaoMi/MiuiBrowser/11.10.8", &matched_keyword));
+    CHECK(matched_keyword == "miuibrowser");
+
+    CHECK(server.is_user_agent_blocked("Mozilla/5.0 UCBrowser/12.9.0.1070 Mobile", &matched_keyword));
+    CHECK(matched_keyword == "ucbrowser");
+
+    CHECK(server.is_user_agent_blocked("Mozilla/5.0 baiduboxapp/11.20.0.14 (Baidu; P1 10)", &matched_keyword));
+    CHECK(matched_keyword == "baiduboxapp");
+
+    CHECK(server.is_user_agent_blocked("Mozilla/5.0 MicroMessenger/7.0.12.1620", &matched_keyword));
+    CHECK(matched_keyword == "micromessenger");
+
+    CHECK_FALSE(server.is_user_agent_blocked("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Safari/537.36", &matched_keyword));
+
+    fs::remove_all(temp_dir);
+}
+
+TEST_CASE("webserver ua blocker can be disabled")
+{
+    WebServer server;
+    server.ua_block_enabled = false;
+    CHECK_FALSE(server.is_user_agent_blocked("Mozilla/5.0 (Linux; Android 10; HMA-AL00)"));
+}

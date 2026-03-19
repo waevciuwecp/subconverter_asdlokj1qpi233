@@ -13,6 +13,23 @@
 #include "webserver.h"
 
 static const char *request_header_blacklist[] = {"host", "accept", "accept-encoding"};
+static const char *fake_nginx_index_page =
+    "<!DOCTYPE html>\n"
+    "<html>\n"
+    "<head>\n"
+    "<title>Welcome to nginx!</title>\n"
+    "<style>\n"
+    "body { width: 35em; margin: 0 auto; font-family: Tahoma, Verdana, Arial, sans-serif; }\n"
+    "</style>\n"
+    "</head>\n"
+    "<body>\n"
+    "<h1>Welcome to nginx!</h1>\n"
+    "<p>If you see this page, the nginx web server is successfully installed and working.</p>\n"
+    "<p>Further configuration is required.</p>\n"
+    "<p>For online documentation and support please refer to <a href=\"http://nginx.org/\">nginx.org</a>.</p>\n"
+    "<p><em>Thank you for using nginx.</em></p>\n"
+    "</body>\n"
+    "</html>\n";
 
 static inline bool is_request_header_blacklisted(const std::string &header)
 {
@@ -150,6 +167,15 @@ int WebServer::start_web_server_multi(listener_args *args)
         {
             res.status = 500;
             res.set_content("Loop request detected!", "text/plain");
+            return httplib::Server::HandlerResponse::Handled;
+        }
+        std::string matched_keyword;
+        if (is_user_agent_blocked(req.get_header_value("User-Agent"), &matched_keyword))
+        {
+            writeLog(0, "Rejected request from client " + req.remote_addr + ":" + std::to_string(req.remote_port) + " due to blocked User-Agent keyword '" + matched_keyword + "'.", LOG_LEVEL_WARNING);
+            res.status = 200;
+            res.set_header("Server", "nginx");
+            res.set_content(fake_nginx_index_page, "text/html");
             return httplib::Server::HandlerResponse::Handled;
         }
         res.set_header("Server", "subconverter/" VERSION " cURL/" LIBCURL_VERSION);

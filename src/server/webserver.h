@@ -4,6 +4,9 @@
 #include <string>
 #include <map>
 #include <atomic>
+#include <chrono>
+#include <mutex>
+#include <vector>
 #include <curl/curlver.h>
 
 #include "utils/map_extra.h"
@@ -53,6 +56,8 @@ class WebServer
 public:
     std::string user_agent_str = "subconverter/" VERSION " cURL/" LIBCURL_VERSION;
     std::atomic_bool SERVER_EXIT_FLAG{false};
+    bool ua_block_enabled = true;
+    std::string ua_block_keywords_path = "base/ua_block_keywords.list";
 
     // file server
     bool serve_file = false;
@@ -86,9 +91,19 @@ public:
 
     int start_web_server(listener_args *args);
     int start_web_server_multi(listener_args *args);
+    bool is_user_agent_blocked(const std::string &user_agent, std::string *matched_keyword = nullptr);
 
     std::vector<responseRoute> responses;
     string_map redirect_map;
+
+private:
+    void reload_ua_block_keywords_if_needed_locked();
+
+    std::mutex ua_block_keywords_mutex;
+    string_array ua_block_keywords;
+    std::string ua_block_keywords_loaded_from;
+    std::chrono::steady_clock::time_point ua_block_keywords_next_reload {};
+    bool ua_block_keywords_missing_warned = false;
 };
 
 #endif // WEBSERVER_H_INCLUDED

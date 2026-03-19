@@ -52,6 +52,7 @@ set(SUBCONVERTER_UNIT_TEST_SOURCES
     test_templates.cpp
     test_urlencode.cpp
     test_webget.cpp
+    test_webserver.cpp
 )
 
 add_executable(subconverter_unit_tests ${SUBCONVERTER_UNIT_TEST_SOURCES})

@@ -1,0 +1,50 @@
+# User-Agent blocker keywords (case-insensitive substring match).
+# One keyword per line. Empty lines and lines starting with '#' are ignored.
+# Brand-level device keywords only.
+
+# Brand keywords
+huawei
+honor
+xiaomi
+redmi
+oppo
+vivo
+oneplus
+meizu
+samsung
+iphone
+zte
+lenovo
+coolpad
+gionee
+tcl
+hisense
+haier
+k-touch
+phicomm
+jiayu
+koobee
+thl
+voto
+malata
+aux
+kpt
+realme
+iqoo
+
+# Sensitive app/browser keywords
+miuibrowser
+xiaomi/miuibrowser
+ucbrowser
+baiduboxapp
+baidubrowser
+baidu
+micromessenger
+micromessager
+wechat
+mqqbrowser
+qqbrowser
+qbwebviewua
+xweb/
+mmwebid/
+mmwebsdk/

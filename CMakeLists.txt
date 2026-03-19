@@ -53,6 +53,7 @@ ADD_EXECUTABLE(${BUILD_TARGET_NAME}
     src/script/cron.cpp
     src/script/script_quickjs.cpp
 #    src/server/webserver_libevent.cpp
+    src/server/webserver.cpp
     src/server/webserver_httplib.cpp
     src/utils/base64/base64.cpp
     src/utils/codepage.cpp
@@ -151,6 +152,7 @@ IF(SUBCONVERTER_BUILD_TESTS)
         src/handler/webget.cpp
         src/parser/infoparser.cpp
         src/parser/subparser.cpp
+        src/server/webserver.cpp
         src/utils/base64/base64.cpp
         src/utils/codepage.cpp
         src/utils/file.cpp
