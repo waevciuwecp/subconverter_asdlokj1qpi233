@@ -20,6 +20,7 @@ original git: https://github.com/asdlokj1qpi23/subconverter
     - [Access Interface](#access-interface)
     - [Description](#description)
   - [Advanced Usage](#advanced-usage)
+    - [UA Defense](#ua-defense)
   - [Auto Upload](#auto-upload)
   
 ## Docker
@@ -185,6 +186,20 @@ Notes:
 - Preset examples:
   - `base/config/nodnsleak.dialer.ini`: dialer with both `dialer-select` and `dialer-lb`.
   - `base/config/nodnsleak.dialer-non_lb.ini`: dialer without `dialer-lb` (select-only + `DIRECT` fallback).
+
+### UA Defense
+
+Incoming HTTP requests are protected by a User-Agent blocker before route handling.
+
+- Keyword list file: `base/ua_block_keywords.list`
+- Match rule: case-insensitive substring match, one keyword per line
+- File format: empty lines and lines starting with `#` are ignored
+- Reload behavior: keywords are reloaded automatically at runtime (no restart required)
+- Response on match: a fake nginx welcome page is returned (`200`, `text/html`)
+
+Default keywords include:
+- mobile brands (for example `huawei`, `xiaomi`, `oppo`, `vivo`, `zte`, `lenovo`)
+- sensitive app/browser signatures (for example `miuibrowser`, `ucbrowser`, `baiduboxapp`, `micromessenger`)
 
 ## Auto Upload
 

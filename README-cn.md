@@ -150,7 +150,7 @@
 
 3.  目标类型为 `mixed` 时，会输出所有支持的节点的单链接组成的普通订阅（Base64编码）
 
-4.  目标类型为 `auto` 时，会根据请求的 `User-Agent` 自动判断输出的目标类型，匹配规则可参见 [此处](https://github.com/tindy2013/subconverter/blob/master/src/handler/interfaces.cpp#L121) （该链接有可能因为代码修改而不能准确指向相应的代码）
+4.  目标类型为 `auto` 时，会根据请求的 `User-Agent` 自动判断输出的目标类型，匹配规则可参见 [此处](https://github.com/tindy2013/subconverter/blob/master/src/handler/interfaces.cpp#L121) （该链接有可能因为代码修改而不能准确指向相应的代码）。如果请求 `User-Agent` 命中 UA 防护关键词，则会在进入 `auto` 判断前直接返回伪 nginx 页面。
 
 * * *
 
@@ -1077,6 +1077,16 @@ custom_proxy_group=dialer-lb`load-balance-use`(sub|dialer|relay)`http://www.gsta
 3.  **serve_file_root**
 
     > Web服务器的根目录，可以为包含静态页面的文件夹，留空则为关闭
+
+4.  **UA 防护关键词列表**
+
+    > 服务端会在路由处理前检查 `User-Agent`，命中关键词时返回伪 nginx 欢迎页（HTTP 200, `text/html`）
+    >
+    > 关键词文件路径：`base/ua_block_keywords.list`
+    >
+    > 匹配规则：不区分大小写的“包含匹配”，每行一个关键词，空行和 `#` 注释行会被忽略
+    >
+    > 关键词文件可在运行时热加载（无需重启）
 
 </details>
 
