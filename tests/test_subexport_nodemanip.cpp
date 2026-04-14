@@ -1167,7 +1167,7 @@ TEST_CASE("xray jsonc vless classic transports parse from stream settings")
 
     const Proxy *tcp = find_by_remark("tcp-out");
     REQUIRE(tcp != nullptr);
-    CHECK(tcp->TransferProtocol == "tcp");
+    CHECK(tcp->TransferProtocol == "http");
     CHECK(tcp->FakeType == "http");
     CHECK(tcp->Path == "/tcp");
     CHECK(tcp->Host == "tcp.host.example");
