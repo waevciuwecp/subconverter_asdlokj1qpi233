@@ -23,29 +23,38 @@ cat > "$tmp_dir/source.json" <<'JSON'
   "outbounds": [
     {
       "type": "vless",
-      "tag": "ws-node",
-      "server": "cfyes.example.com",
+      "tag": "xhttp-node",
+      "server": "xhttp.example.com",
       "server_port": 443,
-      "uuid": "11111111-1111-1111-1111-111111111111",
-      "packet_encoding": "xudp",
+      "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       "tls": {
         "enabled": true,
-        "server_name": "sni.example.com",
-        "utls": {
-          "enabled": true,
-          "fingerprint": "safari"
-        }
+        "server_name": "xhttp.example.com",
+        "alpn": ["h3"]
       },
       "transport": {
-        "type": "ws",
-        "path": "/ws",
-        "headers": {
-          "Host": [
-            "edge.example.com"
-          ]
-        },
-        "max_early_data": 2048,
-        "early_data_header_name": "Sec-WebSocket-Protocol"
+        "type": "xhttp",
+        "host": "xhttp.example.com",
+        "path": "/xhttp",
+        "mode": "stream-up"
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "splithttp-node",
+      "server": "split.example.com",
+      "server_port": 443,
+      "uuid": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "tls": {
+        "enabled": true,
+        "server_name": "split.example.com",
+        "alpn": ["h3"]
+      },
+      "transport": {
+        "type": "splithttp",
+        "host": "split.example.com",
+        "path": "/split",
+        "mode": "packet-up"
       }
     },
     {
@@ -53,10 +62,10 @@ cat > "$tmp_dir/source.json" <<'JSON'
       "tag": "httpupgrade-node",
       "server": "hu.example.com",
       "server_port": 443,
-      "uuid": "22222222-2222-2222-2222-222222222222",
+      "uuid": "cccccccc-cccc-cccc-cccc-cccccccccccc",
       "tls": {
         "enabled": true,
-        "server_name": "tls.hu.example.com"
+        "server_name": "hu.example.com"
       },
       "transport": {
         "type": "httpupgrade",
@@ -110,12 +119,8 @@ assert_jq_true() {
   fi
 }
 
-assert_jq_true "$out_path" '.outbounds[] | select(.tag == "ws-node") | .transport.headers.Host == "edge.example.com"'
-assert_jq_true "$out_path" '.outbounds[] | select(.tag == "ws-node") | .transport.max_early_data == 2048'
-assert_jq_true "$out_path" '.outbounds[] | select(.tag == "ws-node") | .transport.early_data_header_name == "Sec-WebSocket-Protocol"'
-assert_jq_true "$out_path" '.outbounds[] | select(.tag == "ws-node") | .tls.utls.fingerprint == "safari"'
 assert_jq_true "$out_path" '.outbounds[] | select(.tag == "httpupgrade-node") | .transport.type == "httpupgrade"'
-assert_jq_true "$out_path" '.outbounds[] | select(.tag == "httpupgrade-node") | .transport.host == "upgrade.example.com"'
-assert_jq_true "$out_path" '.outbounds[] | select(.tag == "httpupgrade-node") | .transport.path == "/upgrade"'
+assert_jq_true "$out_path" '.outbounds | map(select(.tag == "xhttp-node")) | length == 0'
+assert_jq_true "$out_path" '.outbounds | map(select(.tag == "splithttp-node")) | length == 0'
 
-echo "PASS: singbox ws/httpupgrade transport fields round-trip correctly"
+echo "PASS: strict VLESS transport mapping skips xhttp/splithttp and keeps httpupgrade"

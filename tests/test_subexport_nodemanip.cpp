@@ -9,6 +9,7 @@
 #include "generator/config/subexport.h"
 #include "generator/config/nodemanip.h"
 #include "handler/settings.h"
+#include "parser/subparser.h"
 #include "utils/base64/base64.h"
 
 namespace
@@ -382,4 +383,359 @@ TEST_CASE("subexport sing-box wireguard outbound obeys 1.13.0 removal gate")
         REQUIRE(wg != nullptr);
         CHECK(std::string((*wg)["type"].GetString()) == "wireguard");
     }
+}
+
+TEST_CASE("vless std link keeps ws host distinct from tls sni")
+{
+    const std::string link =
+        "vless://11111111-1111-1111-1111-111111111111@example.com:443"
+        "?encryption=none&security=tls&type=ws&host=ws.example.com&sni=tls.example.com&path=%2Fws#ws-host-sni";
+
+    Proxy node;
+    explode(link, node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    CHECK(node.TransferProtocol == "ws");
+    CHECK(node.TLSSecure);
+    CHECK(node.Host == "ws.example.com");
+    CHECK(node.ServerName == "tls.example.com");
+    CHECK(node.Path == "/ws");
+}
+
+TEST_CASE("vless std link keeps ws host fallback to sni when host missing")
+{
+    const std::string link =
+        "vless://22222222-2222-2222-2222-222222222222@example.com:443"
+        "?encryption=none&security=tls&type=ws&sni=tls-only.example.com&path=%2Fedge#ws-sni-only";
+
+    Proxy node;
+    explode(link, node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    CHECK(node.TransferProtocol == "ws");
+    CHECK(node.TLSSecure);
+    CHECK(node.Host == "tls-only.example.com");
+    CHECK(node.ServerName == "tls-only.example.com");
+    CHECK(node.Path == "/edge");
+}
+
+TEST_CASE("vless ws/tls export to clash preserves ws host and tls sni")
+{
+    const std::string link =
+        "vless://11111111-1111-1111-1111-111111111111@example.com:443"
+        "?encryption=none&security=tls&type=ws&host=ws.example.com&sni=tls.example.com&path=%2Fws#ws-host-sni";
+
+    Proxy node;
+    explode(link, node);
+    REQUIRE(node.Type == ProxyType::VLESS);
+
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+    ext.clash_new_field_name = true;
+
+    const std::string output = proxyToClash(nodes, "{}", rulesets, ProxyGroupConfigs{}, false, ext);
+    YAML::Node root = YAML::Load(output);
+
+    REQUIRE(root["proxies"].IsDefined());
+    REQUIRE(root["proxies"].IsSequence());
+    REQUIRE(root["proxies"].size() == 1);
+
+    const YAML::Node proxy = root["proxies"][0];
+    CHECK(proxy["type"].as<std::string>() == "vless");
+    CHECK(proxy["network"].as<std::string>() == "ws");
+    CHECK(proxy["tls"].as<bool>());
+    CHECK(proxy["ws-opts"]["path"].as<std::string>() == "/ws");
+    CHECK(proxy["ws-opts"]["headers"]["Host"].as<std::string>() == "ws.example.com");
+    CHECK(proxy["servername"].as<std::string>() == "tls.example.com");
+}
+
+TEST_CASE("vless ws/tls export to sing-box preserves ws host and tls sni")
+{
+    const std::string link =
+        "vless://11111111-1111-1111-1111-111111111111@example.com:443"
+        "?encryption=none&security=tls&type=ws&host=ws.example.com&sni=tls.example.com&path=%2Fws#ws-host-sni";
+
+    Proxy node;
+    explode(link, node);
+    REQUIRE(node.Type == ProxyType::VLESS);
+
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+    ext.singbox_version = "1.14.0";
+
+    const std::string output = proxyToSingBox(nodes, "{}", rulesets, ProxyGroupConfigs{}, ext);
+    rapidjson::Document doc;
+    doc.Parse(output.c_str());
+
+    REQUIRE(!doc.HasParseError());
+    const rapidjson::Value *outbound = findOutboundByTag(doc, node.Remark);
+    REQUIRE(outbound != nullptr);
+    REQUIRE(outbound->HasMember("type"));
+    REQUIRE(outbound->HasMember("transport"));
+    REQUIRE(outbound->HasMember("tls"));
+
+    CHECK(std::string((*outbound)["type"].GetString()) == "vless");
+    CHECK(std::string((*outbound)["transport"]["type"].GetString()) == "ws");
+    CHECK(std::string((*outbound)["transport"]["path"].GetString()) == "/ws");
+    CHECK(std::string((*outbound)["transport"]["headers"]["Host"].GetString()) == "ws.example.com");
+    CHECK((*outbound)["tls"]["enabled"].GetBool());
+    CHECK(std::string((*outbound)["tls"]["server_name"].GetString()) == "tls.example.com");
+}
+
+TEST_CASE("vless std link keeps grpc authority distinct from tls sni")
+{
+    const std::string link =
+        "vless://33333333-3333-3333-3333-333333333333@example.com:443"
+        "?encryption=none&security=tls&type=grpc&serviceName=my-grpc&mode=multi"
+        "&authority=grpc-authority.example.com&sni=tls.example.com#grpc-host-sni";
+
+    Proxy node;
+    explode(link, node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    CHECK(node.TransferProtocol == "grpc");
+    CHECK(node.TLSSecure);
+    CHECK(node.Host == "grpc-authority.example.com");
+    CHECK(node.ServerName == "tls.example.com");
+    CHECK(node.GRPCServiceName == "my-grpc");
+    CHECK(node.GRPCMode == "multi");
+}
+
+TEST_CASE("vless std link keeps grpc host fallback to sni when authority missing")
+{
+    const std::string link =
+        "vless://44444444-4444-4444-4444-444444444444@example.com:443"
+        "?encryption=none&security=tls&type=grpc&serviceName=grpc-only&sni=tls-only.example.com#grpc-sni-only";
+
+    Proxy node;
+    explode(link, node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    CHECK(node.TransferProtocol == "grpc");
+    CHECK(node.TLSSecure);
+    CHECK(node.Host == "tls-only.example.com");
+    CHECK(node.ServerName == "tls-only.example.com");
+    CHECK(node.GRPCServiceName == "grpc-only");
+}
+
+TEST_CASE("vless grpc/tls export to clash preserves grpc fields and tls sni")
+{
+    const std::string link =
+        "vless://33333333-3333-3333-3333-333333333333@example.com:443"
+        "?encryption=none&security=tls&type=grpc&serviceName=my-grpc&mode=multi"
+        "&authority=grpc-authority.example.com&sni=tls.example.com#grpc-host-sni";
+
+    Proxy node;
+    explode(link, node);
+    REQUIRE(node.Type == ProxyType::VLESS);
+
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+    ext.clash_new_field_name = true;
+
+    const std::string output = proxyToClash(nodes, "{}", rulesets, ProxyGroupConfigs{}, false, ext);
+    YAML::Node root = YAML::Load(output);
+
+    REQUIRE(root["proxies"].IsDefined());
+    REQUIRE(root["proxies"].IsSequence());
+    REQUIRE(root["proxies"].size() == 1);
+
+    const YAML::Node proxy = root["proxies"][0];
+    CHECK(proxy["type"].as<std::string>() == "vless");
+    CHECK(proxy["network"].as<std::string>() == "grpc");
+    CHECK(proxy["tls"].as<bool>());
+    CHECK(proxy["grpc-opts"]["grpc-service-name"].as<std::string>() == "my-grpc");
+    CHECK(proxy["grpc-opts"]["grpc-mode"].as<std::string>() == "multi");
+    CHECK(proxy["servername"].as<std::string>() == "tls.example.com");
+}
+
+TEST_CASE("vless grpc/tls export to sing-box preserves grpc fields and tls sni")
+{
+    const std::string link =
+        "vless://33333333-3333-3333-3333-333333333333@example.com:443"
+        "?encryption=none&security=tls&type=grpc&serviceName=my-grpc&mode=multi"
+        "&authority=grpc-authority.example.com&sni=tls.example.com#grpc-host-sni";
+
+    Proxy node;
+    explode(link, node);
+    REQUIRE(node.Type == ProxyType::VLESS);
+
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+    ext.singbox_version = "1.14.0";
+
+    const std::string output = proxyToSingBox(nodes, "{}", rulesets, ProxyGroupConfigs{}, ext);
+    rapidjson::Document doc;
+    doc.Parse(output.c_str());
+
+    REQUIRE(!doc.HasParseError());
+    const rapidjson::Value *outbound = findOutboundByTag(doc, node.Remark);
+    REQUIRE(outbound != nullptr);
+    REQUIRE(outbound->HasMember("type"));
+    REQUIRE(outbound->HasMember("transport"));
+    REQUIRE(outbound->HasMember("tls"));
+
+    CHECK(std::string((*outbound)["type"].GetString()) == "vless");
+    CHECK(std::string((*outbound)["transport"]["type"].GetString()) == "grpc");
+    CHECK(std::string((*outbound)["transport"]["service_name"].GetString()) == "my-grpc");
+    CHECK((*outbound)["tls"]["enabled"].GetBool());
+    CHECK(std::string((*outbound)["tls"]["server_name"].GetString()) == "tls.example.com");
+}
+
+TEST_CASE("vless std link keeps xhttp transport and core fields")
+{
+    const std::string link =
+        "vless://55555555-5555-5555-5555-555555555555@example.com:443"
+        "?encryption=none&security=tls&type=xhttp&host=xhttp.example.com&path=%2Fxhttp&mode=stream-up"
+        "&alpn=h3&sni=tls.example.com#xhttp-node";
+
+    Proxy node;
+    explode(link, node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    CHECK(node.TransferProtocol == "xhttp");
+    CHECK(node.Host == "xhttp.example.com");
+    CHECK(node.Path == "/xhttp");
+    CHECK(node.XHTTPMode == "stream-up");
+    CHECK(node.ServerName == "tls.example.com");
+    REQUIRE(node.AlpnList.size() == 1);
+    CHECK(node.AlpnList[0] == "h3");
+}
+
+TEST_CASE("vless std link keeps httpupgrade transport")
+{
+    const std::string link =
+        "vless://66666666-6666-6666-6666-666666666666@example.com:443"
+        "?encryption=none&security=tls&type=httpupgrade&host=hu.example.com&path=%2Fupgrade&sni=tls.example.com#httpupgrade-node";
+
+    Proxy node;
+    explode(link, node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    CHECK(node.TransferProtocol == "httpupgrade");
+    CHECK(node.Host == "hu.example.com");
+    CHECK(node.Path == "/upgrade");
+    CHECK(node.ServerName == "tls.example.com");
+}
+
+TEST_CASE("vless std link keeps splithttp transport and h3 alpn")
+{
+    const std::string link =
+        "vless://77777777-7777-7777-7777-777777777777@example.com:443"
+        "?encryption=none&security=tls&type=splithttp&host=split.example.com&path=%2Fsplit&mode=packet-up"
+        "&alpn=h3&sni=tls.example.com#splithttp-node";
+
+    Proxy node;
+    explode(link, node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    CHECK(node.TransferProtocol == "splithttp");
+    CHECK(node.Host == "split.example.com");
+    CHECK(node.Path == "/split");
+    CHECK(node.XHTTPMode == "packet-up");
+    REQUIRE(node.AlpnList.size() == 1);
+    CHECK(node.AlpnList[0] == "h3");
+}
+
+TEST_CASE("vless single export keeps xhttp type and mode")
+{
+    Proxy node;
+    explode("vless://88888888-8888-8888-8888-888888888888@example.com:443"
+            "?encryption=none&security=tls&type=xhttp&host=xhttp.example.com&path=%2Fnode&mode=stream-one#xhttp-export",
+            node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    std::vector<Proxy> nodes = {node};
+    extra_settings ext;
+    ext.nodelist = true;
+    const std::string output = proxyToSingle(nodes, 32, ext);
+    const std::string plain = output.find("vless://") != std::string::npos ? output : urlSafeBase64Decode(output);
+
+    CHECK(plain.find("type=xhttp") != std::string::npos);
+    CHECK(plain.find("mode=stream-one") != std::string::npos);
+    CHECK(plain.find("path=") != std::string::npos);
+}
+
+TEST_CASE("vless sing-box export keeps httpupgrade transport")
+{
+    Proxy node;
+    explode("vless://99999999-9999-9999-9999-999999999999@example.com:443"
+            "?encryption=none&security=tls&type=httpupgrade&host=hu.example.com&path=%2Fup&sni=tls.example.com#hu-export",
+            node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+    ext.singbox_version = "1.14.0";
+
+    const std::string output = proxyToSingBox(nodes, "{}", rulesets, ProxyGroupConfigs{}, ext);
+    rapidjson::Document doc;
+    doc.Parse(output.c_str());
+    REQUIRE(!doc.HasParseError());
+
+    const rapidjson::Value *outbound = findOutboundByTag(doc, node.Remark);
+    REQUIRE(outbound != nullptr);
+    REQUIRE(outbound->HasMember("transport"));
+    CHECK(std::string((*outbound)["transport"]["type"].GetString()) == "httpupgrade");
+    CHECK(std::string((*outbound)["transport"]["path"].GetString()) == "/up");
+}
+
+TEST_CASE("vless clash export fail-closes xhttp transport")
+{
+    Proxy node;
+    explode("vless://aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@example.com:443"
+            "?encryption=none&security=tls&type=xhttp&host=xhttp.example.com&path=%2Fxhttp#xhttp-clash",
+            node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+    ext.clash_new_field_name = true;
+
+    const std::string output = proxyToClash(nodes, "{}", rulesets, ProxyGroupConfigs{}, false, ext);
+    YAML::Node root = YAML::Load(output);
+    REQUIRE(root["proxies"].IsDefined());
+    CHECK(root["proxies"].size() == 0);
+}
+
+TEST_CASE("vless sing-box export fail-closes splithttp transport")
+{
+    Proxy node;
+    explode("vless://bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb@example.com:443"
+            "?encryption=none&security=tls&type=splithttp&host=split.example.com&path=%2Fsplit&mode=stream-up#split-singbox",
+            node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+    ext.singbox_version = "1.14.0";
+
+    const std::string output = proxyToSingBox(nodes, "{}", rulesets, ProxyGroupConfigs{}, ext);
+    rapidjson::Document doc;
+    doc.Parse(output.c_str());
+    REQUIRE(!doc.HasParseError());
+
+    const rapidjson::Value *outbound = findOutboundByTag(doc, node.Remark);
+    CHECK(outbound == nullptr);
 }

@@ -52,6 +52,11 @@ bool isNumeric(const std::string &str) {
     return true;
 }
 
+void logSkipUnsupportedVlessTransport(const std::string &target, const Proxy &proxy) {
+    writeLog(0, "Skip VLESS node '" + proxy.Remark + "' for target '" + target +
+                "': unsupported transport '" + proxy.TransferProtocol + "'.", LOG_LEVEL_WARNING);
+}
+
 
 std::string
 vmessLinkConstruct(const std::string &remarks, const std::string &add, const std::string &port, const std::string &type,
@@ -820,6 +825,11 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                         singleproxy["grpc-opts"]["grpc-mode"] = x.GRPCMode;
                         singleproxy["grpc-opts"]["grpc-service-name"] = x.GRPCServiceName;
                         break;
+                    case "xhttp"_hash:
+                    case "httpupgrade"_hash:
+                    case "splithttp"_hash:
+                        logSkipUnsupportedVlessTransport("clash", x);
+                        continue;
                     default:
                         continue;
                 }
@@ -1387,6 +1397,7 @@ std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &
                         plugin = x.Plugin, &pluginopts = x.PluginOption, &protocol = x.Protocol, &protoparam = x.
                         ProtocolParam, &flow = x.Flow, &pbk = x.PublicKey, &sid = x.ShortId, &fp = x.Fingerprint,
                 &packet_encoding = x.PacketEncoding, &fake_type = x.FakeType, &mode = x.GRPCMode,
+                &xhttp_mode = x.XHTTPMode,
                 &obfs = x.OBFS, &obfsparam = x.OBFSParam, &obfsPassword = x.OBFSPassword, &id = x.UserId, &transproto =
                         x.TransferProtocol, &host = x.
                         Host, &tls = x.TLSStr, &path = x.Path, &faketype = x.FakeType, &ports = x.Ports;
@@ -1514,6 +1525,22 @@ std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &
                         case "grpc"_hash:
                             proxyStr += "&serviceName=" + path;
                             proxyStr += "&mode=" + mode;
+                            break;
+                        case "httpupgrade"_hash:
+                            if (!host.empty()) {
+                                proxyStr += "&host=" + host;
+                            }
+                            proxyStr += "&path=" + urlEncode(path.empty() ? "/" : path);
+                            break;
+                        case "xhttp"_hash:
+                        case "splithttp"_hash:
+                            if (!host.empty()) {
+                                proxyStr += "&host=" + host;
+                            }
+                            proxyStr += "&path=" + urlEncode(path.empty() ? "/" : path);
+                            if (!xhttp_mode.empty()) {
+                                proxyStr += "&mode=" + xhttp_mode;
+                            }
                             break;
                         case "quic"_hash:
                             proxyStr += "&headerType=" + fake_type;
@@ -1923,6 +1950,10 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
                 else
                     method = "none";
                 proxyStr = "vless = " + hostname + ":" + port + ", method=" + method + ", password=" + id;
+                if (transproto == "xhttp" || transproto == "httpupgrade" || transproto == "splithttp") {
+                    logSkipUnsupportedVlessTransport("quantumultx", x);
+                    continue;
+                }
                 if (x.AlterId != 0)
                     proxyStr += ", aead=false";
                 if (tlssecure && !tls13.is_undef())
@@ -2443,6 +2474,9 @@ proxyToLoon(std::vector<Proxy> &nodes, const std::string &base_conf,
                             ",udp=" + (udp.get() ? "true" : "false") + ",over-tls=" + (
                                 tlssecure ? "true" : "false") + ",sni=" + sni;
                     } else {
+                        if (transproto == "xhttp" || transproto == "httpupgrade" || transproto == "splithttp") {
+                            logSkipUnsupportedVlessTransport("mellow", x);
+                        }
                         continue;
                     }
                 } else {
@@ -3154,6 +3188,16 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                         vlesstransport.AddMember("path", rapidjson::StringRef(x.Path.c_str()), allocator);
                         proxy.AddMember("transport", vlesstransport, allocator);
                         break;
+                    case "httpupgrade"_hash:
+                        vlesstransport.AddMember("type", rapidjson::StringRef("httpupgrade"), allocator);
+                        vlesstransport.AddMember("host", rapidjson::StringRef(x.Host.c_str()), allocator);
+                        vlesstransport.AddMember("path", rapidjson::StringRef(x.Path.c_str()), allocator);
+                        proxy.AddMember("transport", vlesstransport, allocator);
+                        break;
+                    case "xhttp"_hash:
+                    case "splithttp"_hash:
+                        logSkipUnsupportedVlessTransport("sing-box", x);
+                        continue;
                     case "grpc"_hash:
                         vlesstransport.AddMember("type", rapidjson::StringRef("grpc"), allocator);
                         vlesstransport.AddMember("service_name", rapidjson::StringRef(x.GRPCServiceName.c_str()),

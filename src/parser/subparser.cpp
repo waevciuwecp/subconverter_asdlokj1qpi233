@@ -246,7 +246,8 @@ void vlessConstruct(Proxy &node, const std::string &group, const std::string &re
                     const std::string &pbk, const std::string &sid, const std::string &fp, const std::string &sni,
                     const std::vector<std::string> &alpnList, const std::string &packet_encoding, const std::string &encryption,
                     tribool udp, tribool tfo,
-                    tribool scv, tribool tls13, const std::string &underlying_proxy, tribool v2ray_http_upgrade) {
+                    tribool scv, tribool tls13, const std::string &underlying_proxy, tribool v2ray_http_upgrade,
+                    const std::string &xhttp_mode) {
     commonConstruct(node, ProxyType::VLESS, group, remarks, add, port, udp, tfo, scv, tls13, underlying_proxy);
     node.UserId = id.empty() ? "00000000-0000-0000-0000-000000000000" : id;
     node.AlterId = to_int(aid);
@@ -264,11 +265,18 @@ void vlessConstruct(Proxy &node, const std::string &group, const std::string &re
     node.AlpnList = alpnList;
     node.PacketEncoding = packet_encoding;
     node.TLSStr = tls;
+    node.XHTTPMode = "";
     switch (hash_(net)) {
         case "grpc"_hash:
             node.Host = host;
             node.GRPCMode = mode.empty() ? "gun" : mode;
             node.GRPCServiceName = path.empty() ? "/" : urlEncode(urlDecode(trim(path)));
+            break;
+        case "xhttp"_hash:
+        case "splithttp"_hash:
+            node.Host = (host.empty() && !isIPv4(add) && !isIPv6(add)) ? add.data() : trim(host);
+            node.Path = path.empty() ? "/" : urlDecode(trim(path));
+            node.XHTTPMode = trim(xhttp_mode);
             break;
         case "quic"_hash:
             node.Host = host;
@@ -1792,7 +1800,7 @@ void explodeStdHysteria2(std::string hysteria2, Proxy &node) {
 
 
 void explodeStdVless(std::string vless, Proxy &node) {
-    std::string add, port, type, id, aid, net, flow, pbk, sid, fp, mode, path, host, tls, remarks, sni, encryption;
+    std::string add, port, type, id, aid, net, flow, pbk, sid, fp, mode, xhttp_mode, path, host, tls, remarks, sni, encryption;
     std::string addition;
     vless = vless.substr(8);
     string_size pos;
@@ -1825,17 +1833,38 @@ void explodeStdVless(std::string vless, Proxy &node) {
         case "ws"_hash:
         case "h2"_hash:
             type = getUrlArg(addition, "headerType");
-            host = getUrlArg(addition, strFind(addition, "sni") ? "sni" : "host");
+            host = getUrlArg(addition, "host");
+            if (host.empty())
+                host = getUrlArg(addition, "sni");
             path = getUrlArg(addition, "path");
             break;
         case "xhttp"_hash: // 新增对 type=xhttp 的支持
-            net = "h2"; // 视为 h2/http2 传输
             type = getUrlArg(addition, "headerType");
-            host = getUrlArg(addition, strFind(addition, "sni") ? "sni" : "host");
+            host = getUrlArg(addition, "host");
+            if (host.empty())
+                host = getUrlArg(addition, "sni");
+            path = getUrlArg(addition, "path");
+            xhttp_mode = getUrlArg(addition, "mode");
+            break;
+        case "httpupgrade"_hash:
+            host = getUrlArg(addition, "host");
+            if (host.empty())
+                host = getUrlArg(addition, "sni");
             path = getUrlArg(addition, "path");
             break;
+        case "splithttp"_hash:
+            host = getUrlArg(addition, "host");
+            if (host.empty())
+                host = getUrlArg(addition, "sni");
+            path = getUrlArg(addition, "path");
+            xhttp_mode = getUrlArg(addition, "mode");
+            break;
         case "grpc"_hash:
-            host = getUrlArg(addition, "sni");
+            host = getUrlArg(addition, "authority");
+            if (host.empty())
+                host = getUrlArg(addition, "host");
+            if (host.empty())
+                host = getUrlArg(addition, "sni");
             path = getUrlArg(addition, "serviceName");
             mode = getUrlArg(addition, "mode");
             break;
@@ -1852,7 +1881,8 @@ void explodeStdVless(std::string vless, Proxy &node) {
         remarks = add + ":" + port;
     sni = getUrlArg(addition, "sni");
     vlessConstruct(node, XRAY_DEFAULT_GROUP, remarks, add, port, type, id, aid, net, "auto", flow, mode, path, host, "",
-                   tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption);
+                   tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption, tribool(), tribool(), tribool(),
+                   tribool(), "", tribool(), xhttp_mode);
     return;
 }
 
@@ -2932,7 +2962,7 @@ void explodeSingbox(rapidjson::Value &outbounds, std::vector<Proxy> &nodes) {
             std::string fp = "chrome", pbk, sid, packet_encoding, encryption; //vless
             std::string plugin, pluginopts, pluginopts_mode, pluginopts_host, pluginopts_mux; //ss
             std::string protocol, protoparam, obfs, obfsparam; //ssr
-            std::string flow, mode; //trojan
+            std::string flow, mode, xhttp_mode; //trojan/vless xhttp
             std::string user; //socks
             std::string ip, ipv6, private_key, public_key, mtu; //wireguard
             std::string auth, up, down, obfsParam, insecure, alpn; //hysteria
@@ -3041,6 +3071,7 @@ void explodeSingbox(rapidjson::Value &outbounds, std::vector<Proxy> &nodes) {
                         flow = GetMember(singboxNode, "flow");
                         encryption = GetMember(singboxNode, "encryption");
                         packet_encoding = GetMember(singboxNode, "packet_encoding");
+                        xhttp_mode.clear();
                         if (singboxNode.HasMember("transport") && singboxNode["transport"].IsObject()) {
                             rapidjson::Value transport = singboxNode["transport"].GetObject();
                             net = GetMember(transport, "type");
@@ -3081,7 +3112,14 @@ void explodeSingbox(rapidjson::Value &outbounds, std::vector<Proxy> &nodes) {
                                     break;
                                 }
                                 case "httpupgrade"_hash: {
-                                    net = "h2";
+                                    host = getSingBoxStringOrFirstArrayString(transport, "host");
+                                    path = GetMember(transport, "path");
+                                    edge.clear();
+                                    break;
+                                }
+                                case "xhttp"_hash:
+                                case "splithttp"_hash: {
+                                    xhttp_mode = GetMember(transport, "mode");
                                     host = getSingBoxStringOrFirstArrayString(transport, "host");
                                     path = GetMember(transport, "path");
                                     edge.clear();
@@ -3092,11 +3130,16 @@ void explodeSingbox(rapidjson::Value &outbounds, std::vector<Proxy> &nodes) {
                                     path = GetMember(transport, "service_name");
                                     break;
                                 }
+                                default:
+                                    writeLog(0, "Skip unsupported sing-box vless transport '" + net + "' for outbound '" +
+                                                (ps.empty() ? server + ":" + port : ps) + "'.", LOG_LEVEL_WARNING);
+                                    continue;
                             }
                         }
 
                         vlessConstruct(node, group, ps, server, port, type, id, aid, net, "auto", flow, mode, path,
-                                       host, "", tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption, udp);
+                                       host, "", tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption, udp,
+                                       tribool(), tribool(), tribool(), "", tribool(), xhttp_mode);
                         break;
                     case "http"_hash:
                         password = GetMember(singboxNode, "password");
