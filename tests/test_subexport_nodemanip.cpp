@@ -749,7 +749,7 @@ TEST_CASE("vless clash export keeps mlkem encryption")
     CHECK(clashNode["encryption"].as<std::string>() == "mlkem768x25519plus.native.1rtt.QUJDREVGR0g");
 }
 
-TEST_CASE("vless clash export fail-closes pqv-only node")
+TEST_CASE("vless clash export keeps pqv-only node")
 {
     Proxy node;
     explode("vless://acacacac-acac-acac-acac-acacacacacac@example.com:443"
@@ -767,7 +767,10 @@ TEST_CASE("vless clash export fail-closes pqv-only node")
     const std::string output = proxyToClash(nodes, "{}", rulesets, ProxyGroupConfigs{}, false, ext);
     YAML::Node root = YAML::Load(output);
     REQUIRE(root["proxies"].IsDefined());
-    CHECK(root["proxies"].size() == 0);
+    REQUIRE(root["proxies"].size() == 1);
+    YAML::Node clashNode = root["proxies"][0];
+    CHECK(clashNode["name"].as<std::string>() == "pqv-clash");
+    CHECK(!clashNode["pqv"].IsDefined());
 }
 
 TEST_CASE("vless sing-box export fail-closes splithttp transport")

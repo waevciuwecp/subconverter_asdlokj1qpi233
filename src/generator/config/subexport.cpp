@@ -71,8 +71,9 @@ void logSkipUnsupportedVlessMlkemMapping(const std::string &target, const Proxy 
                 "': unsupported ML-KEM/PQV mapping (" + reason + ").", LOG_LEVEL_WARNING);
 }
 
-bool shouldSkipVlessStrictMapping(const std::string &target, const Proxy &proxy, bool reject_mlkem_encryption) {
-    if (hasUnmappablePqv(proxy)) {
+bool shouldSkipVlessStrictMapping(const std::string &target, const Proxy &proxy, bool reject_pqv,
+                                  bool reject_mlkem_encryption) {
+    if (reject_pqv && hasUnmappablePqv(proxy)) {
         logSkipUnsupportedVlessMlkemMapping(target, proxy, "pqv");
         return true;
     }
@@ -766,7 +767,7 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 break;
             case ProxyType::VLESS:
                 singleproxy["type"] = "vless";
-                if (shouldSkipVlessStrictMapping("clash", x, false)) {
+                if (shouldSkipVlessStrictMapping("clash", x, false, false)) {
                     continue;
                 }
                 singleproxy["uuid"] = x.UserId;
@@ -3187,7 +3188,7 @@ proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json,
                 break;
             }
             case ProxyType::VLESS: {
-                if (shouldSkipVlessStrictMapping("sing-box", x, true)) {
+                if (shouldSkipVlessStrictMapping("sing-box", x, true, true)) {
                     continue;
                 }
                 addSingBoxCommonMembers(proxy, x, "vless", allocator);
