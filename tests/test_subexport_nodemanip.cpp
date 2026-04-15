@@ -826,6 +826,67 @@ TEST_CASE("vless sing-box export fail-closes mlkem and pqv nodes")
     CHECK(findOutboundByTag(doc, "pqv-singbox") == nullptr);
 }
 
+TEST_CASE("vless quanx export keeps post-quantum encryption field")
+{
+    Proxy node;
+    explode("vless://dededede-dede-dede-dede-dededededede@example.com:443"
+            "?encryption=mlkem768x25519plus.native.1rtt.QUJDREVGR0g&security=tls&type=tcp#mlkem-quanx",
+            node);
+
+    REQUIRE(node.Type == ProxyType::VLESS);
+    std::vector<Proxy> nodes = {node};
+    std::vector<RulesetContent> rulesets;
+    extra_settings ext;
+    ext.enable_rule_generator = false;
+    ext.nodelist = true;
+
+    const std::string output = proxyToQuanX(nodes, "", rulesets, ProxyGroupConfigs{}, ext);
+    CHECK(output.find("vless = ") != std::string::npos);
+    CHECK(output.find("encryption=mlkem768x25519plus.native.1rtt.QUJDREVGR0g") != std::string::npos);
+}
+
+TEST_CASE("clash full yaml with top-level keys parses vless encryption variants")
+{
+    const std::string content = R"yaml(
+port: 7890
+mode: Rule
+proxies:
+  - {name: awesome x25519, server: good-idea.yaoyy.moe, port: 2053, type: vless, uuid: d7e236b8-f483-4628-90b3-47f38a60e572, tls: true, flow: xtls-rprx-vision, encryption: mlkem768x25519plus.native.0rtt.AAAA, skip-cert-verify: false, reality-opts: {public-key: R6R8_dlcka-upDfSFkyOLuU4GEcHQXiRzyrJNbt9Ojs, short-id: "942e34625bf371" }, servername: www.oracle.com, client-fingerprint: chrome, network: http, http-opts: {method: GET, path: [/good], headers: {Host: [www.oracle.com]}}}
+  - {name: awesome post-quantum, server: good-idea.yaoyy.moe, port: 2096, type: vless, uuid: aa3d175b-dba0-4c7a-aa31-a7986dc600e0, tls: true, flow: xtls-rprx-vision, encryption: mlkem768x25519plus.native.0rtt.BBBB, skip-cert-verify: false, reality-opts: {public-key: aRcEpcPWntX6JpI6aWFgS_9Z7rdkgMZafhMRJmDcS0E, short-id: "e4b18de4dc" }, servername: www.oracle.com, client-fingerprint: chrome, network: http, http-opts: {method: GET, path: [/bad], headers: {Host: [www.oracle.com]}}}
+  - {name: awesome no-encr, server: good-idea.yaoyy.moe, port: 2087, type: vless, uuid: 37cdd9ef-b8d4-4fd2-95c7-6b3435f757d0, tls: true, flow: xtls-rprx-vision, skip-cert-verify: false, reality-opts: {public-key: 7O91nNzw4aOtRTW1S3qrChi3kjkRLAlG7Nu7E9qKwC4, short-id: "f6e6a78714e8" }, servername: www.oracle.com, client-fingerprint: chrome, network: http, http-opts: {method: GET, path: [/noway], headers: {Host: [www.oracle.com]}}}
+)yaml";
+
+    std::vector<Proxy> nodes;
+    REQUIRE(explodeConfContent(content, nodes) == 1);
+    REQUIRE(nodes.size() == 3);
+
+    const auto findNode = [&](const std::string &remark) -> const Proxy * {
+        for (const auto &node: nodes) {
+            if (node.Remark == remark)
+                return &node;
+        }
+        return nullptr;
+    };
+
+    const Proxy *x25519 = findNode("awesome x25519");
+    REQUIRE(x25519 != nullptr);
+    CHECK(x25519->Type == ProxyType::VLESS);
+    CHECK(x25519->TransferProtocol == "http");
+    CHECK(x25519->Encryption == "mlkem768x25519plus.native.0rtt.AAAA");
+
+    const Proxy *postQuantum = findNode("awesome post-quantum");
+    REQUIRE(postQuantum != nullptr);
+    CHECK(postQuantum->Type == ProxyType::VLESS);
+    CHECK(postQuantum->TransferProtocol == "http");
+    CHECK(postQuantum->Encryption == "mlkem768x25519plus.native.0rtt.BBBB");
+
+    const Proxy *noEncr = findNode("awesome no-encr");
+    REQUIRE(noEncr != nullptr);
+    CHECK(noEncr->Type == ProxyType::VLESS);
+    CHECK(noEncr->TransferProtocol == "http");
+    CHECK(noEncr->Encryption.empty());
+}
+
 TEST_CASE("xray jsonc vless xhttp and splithttp examples parse correctly")
 {
     const std::string content = R"jsonc(

@@ -1641,7 +1641,6 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                     host = singleproxy["sni"].IsDefined()
                                ? safe_as<std::string>(singleproxy["sni"])
                                : safe_as<std::string>(singleproxy["servername"]);
-                    printf("host:%s", host.c_str());
                     singleproxy["reality-opts"]["public-key"] >>= pbk;
                     singleproxy["reality-opts"]["short-id"] >>= sid;
                 }
@@ -2193,7 +2192,7 @@ bool explodeSurge(std::string surge, std::vector<Proxy> &nodes) {
     for (auto &x: proxies) {
         std::string remarks, server, port, method, username, password, sni; //common
         std::string plugin, pluginopts, pluginopts_mode, pluginopts_host, mod_url, mod_md5; //ss
-        std::string id, net, tls, host, edge, path, fp; //v2
+        std::string id, net, tls, host, edge, path, fp, encryption; //v2
         std::string protocol, protoparam; //ssr
         std::string section, ip, ipv6, private_key, public_key, mtu, test_url, client_id, peer, keepalive; //wireguard
         string_array dns_servers;
@@ -2754,6 +2753,7 @@ bool explodeSurge(std::string surge, std::vector<Proxy> &nodes) {
                         if (port == "0")
                             continue;
                         net = "tcp";
+                        encryption.clear();
 
                         for (i = 1; i < configs.size(); i++) {
                             vArray = split(trim(configs[i]), "=");
@@ -2764,6 +2764,9 @@ bool explodeSurge(std::string surge, std::vector<Proxy> &nodes) {
                             switch (hash_(itemName)) {
                                 case "method"_hash:
                                     method = itemVal;
+                                    break;
+                                case "encryption"_hash:
+                                    encryption = itemVal;
                                     break;
                                 case "password"_hash:
                                     id = itemVal;
@@ -2813,7 +2816,7 @@ bool explodeSurge(std::string surge, std::vector<Proxy> &nodes) {
                             remarks = server + ":" + port;
                         vlessConstruct(node, XRAY_DEFAULT_GROUP, remarks, server, port, "", id, aead, net, method,
                                        "chrome", "", path, host, "",
-                                       tls, "", "", fp, sni, std::vector<std::string>{}, "","", udp, tfo, scv, tls13);
+                                       tls, "", "", fp, sni, std::vector<std::string>{}, "", encryption, udp, tfo, scv, tls13);
                         break;
                     case "trojan"_hash: //quantumult x style trojan link
                         server = trim(configs[0].substr(0, configs[0].rfind(':')));
@@ -3562,19 +3565,62 @@ void explodeSub(std::string sub, std::vector<Proxy> &nodes) {
     }
 
     //try to parse as clash configuration
-    try {
-        if (!processed && regFind(sub, "\"?(Proxy|proxies)\"?:")) {
-            regGetMatch(sub, R"(^(?:Proxy|proxies):$\s(?:(?:^ +?.*$| *?-.*$|)\s?)+)", 1, &sub);
-            Node yamlnode = Load(sub);
-            if (yamlnode.size() && (yamlnode["Proxy"].IsDefined() || yamlnode["proxies"].IsDefined())) {
-                explodeClash(yamlnode, nodes);
-                processed = true;
+    if (!processed && regFind(sub, "\"?(Proxy|proxies)\"?:")) {
+        auto tryParseClashYaml = [&](const std::string &yamlContent) -> bool {
+            try {
+                Node yamlnode = Load(yamlContent);
+                if (yamlnode.size() && (yamlnode["Proxy"].IsDefined() || yamlnode["proxies"].IsDefined())) {
+                    explodeClash(yamlnode, nodes);
+                    return true;
+                }
+            } catch (const std::exception &) {
+                // ignore and try fallback extraction below
             }
+            return false;
+        };
+
+        // Prefer parsing full YAML (common clash configs include top-level keys before proxies)
+        if (tryParseClashYaml(sub)) {
+            processed = true;
+        } else {
+            // Fallback to proxies-only extraction when full document parse fails.
+            // This handles full clash documents where "proxies:" is not the first top-level key.
+            std::string proxySection;
+            std::vector<std::string> lines = split(sub, "\n");
+            int sectionStart = -1;
+            int sectionEnd = static_cast<int>(lines.size());
+            size_t baseIndent = 0;
+            for (int idx = 0; idx < static_cast<int>(lines.size()); ++idx) {
+                const std::string &line = lines[idx];
+                const std::string trimmed = trim(line);
+                const size_t indent = line.find_first_not_of(" \t");
+                if (sectionStart < 0) {
+                    if (regMatch(line, R"(^\s*(Proxy|proxies)\s*:\s*$)")) {
+                        sectionStart = idx;
+                        baseIndent = indent == std::string::npos ? 0 : indent;
+                    }
+                    continue;
+                }
+
+                if (trimmed.empty())
+                    continue;
+
+                const size_t currentIndent = indent == std::string::npos ? 0 : indent;
+                if (currentIndent <= baseIndent && !startsWith(trimmed, "#")) {
+                    sectionEnd = idx;
+                    break;
+                }
+            }
+
+            if (sectionStart >= 0) {
+                for (int idx = sectionStart; idx < sectionEnd; ++idx) {
+                    proxySection += lines[idx];
+                    proxySection += "\n";
+                }
+            }
+            if (!proxySection.empty() && tryParseClashYaml(proxySection))
+                processed = true;
         }
-    } catch (std::exception &e) {
-        //writeLog(0, e.what(), LOG_LEVEL_DEBUG);
-        //ignore
-        throw;
     }
     try {
         std::string pattern = "\"?(inbounds)\"?:";

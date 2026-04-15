@@ -1998,6 +1998,15 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
                 else
                     method = "none";
                 proxyStr = "vless = " + hostname + ":" + port + ", method=" + method + ", password=" + id;
+                {
+                    std::string vless_encryption = x.Encryption;
+                    if (vless_encryption.empty() && !x.EncryptMethod.empty() &&
+                        x.EncryptMethod != "none" && x.EncryptMethod != "auto") {
+                        vless_encryption = x.EncryptMethod;
+                    }
+                    if (!vless_encryption.empty() && vless_encryption != "none")
+                        proxyStr += ", encryption=" + vless_encryption;
+                }
                 if (transproto == "xhttp" || transproto == "httpupgrade" || transproto == "splithttp") {
                     logSkipUnsupportedVlessTransport("quantumultx", x);
                     continue;
