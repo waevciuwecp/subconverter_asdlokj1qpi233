@@ -467,6 +467,7 @@ static bool mergePackedQueryArguments(string_multimap &argument)
     string_array entries = split(query, "&");
     std::vector<std::pair<std::string, std::string>> decoded_entries;
     bool compact_mode = false;
+    size_t pending_digest_url_idx = std::numeric_limits<size_t>::max();
     for(const std::string &entry : entries)
     {
         if(entry.empty())
@@ -476,11 +477,26 @@ static bool mergePackedQueryArguments(string_multimap &argument)
         std::string value = eq_pos == std::string::npos ? "" : entry.substr(eq_pos + 1);
         key = urlDecode(key);
         value = urlDecode(value);
-        if(key.empty() || key == "q")
+        if(key.empty())
             continue;
+        if(key == "q")
+        {
+            if(pending_digest_url_idx != std::numeric_limits<size_t>::max() && pending_digest_url_idx < decoded_entries.size())
+            {
+                decoded_entries[pending_digest_url_idx].second += "&q=" + value;
+                pending_digest_url_idx = std::numeric_limits<size_t>::max();
+            }
+            continue;
+        }
         if(key == "m" && isDigestCompactMode(value))
             compact_mode = true;
         decoded_entries.emplace_back(std::move(key), std::move(value));
+        std::string expanded_key = expandDigestCompactAlias(decoded_entries.back().first, compact_mode);
+        if(expanded_key == "url" && decoded_entries.back().second.find("/digest?") != std::string::npos &&
+           getUrlArg(decoded_entries.back().second, "q").empty())
+            pending_digest_url_idx = decoded_entries.size() - 1;
+        else
+            pending_digest_url_idx = std::numeric_limits<size_t>::max();
     }
 
     uint64_t true_mask = 0;

@@ -144,7 +144,7 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         writeLog(LOG_TYPE_INFO, "Downloading subscription data...");
         if(startsWith(link, "surge:///install-config")) //surge config link
             link = urlDecode(getUrlArg(link, "url"));
-        strSub = webGet(link, proxy, global.cacheSubscription, &extra_headers, request_headers);
+        strSub = webGet(link, proxy, global.cacheSubscription, &extra_headers, request_headers, true);
         /*
         if(strSub.size() == 0)
         {

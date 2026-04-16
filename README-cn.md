@@ -146,14 +146,18 @@
     `target=auto` 会按 User-Agent 自动映射，仍可能输出当前 Shadowrocket 版本或服务端方言不兼容的节点形态。
     实际回退建议：当前若必须二选一，为提升 Shadowrocket 可用性优先保留 `flow=xtls-rprx-vision` 并先使用非 PQ 加密；同时可额外提供 `flow=none` 的 PQ 节点供可选使用。
 
-2.  类 TG 代理的 HTTP/Socks 链接由于没有命名设定，所以可以在后方插入`&remarks=`进行命名，同时也可以插入 `&group=` 设置组别名称，以上两个参数需要经过 [URLEncode](https://www.urlencoder.org/) 处理，例如
+2.  VLESS REALITY 生产安全指南：
+    - 英文版：[docs/vless-reality-production-safe.md](./docs/vless-reality-production-safe.md)
+    - 中文版：[docs/vless-reality-production-safe-cn.md](./docs/vless-reality-production-safe-cn.md)
+
+3.  类 TG 代理的 HTTP/Socks 链接由于没有命名设定，所以可以在后方插入`&remarks=`进行命名，同时也可以插入 `&group=` 设置组别名称，以上两个参数需要经过 [URLEncode](https://www.urlencoder.org/) 处理，例如
 
     -   tg://http?server=1.2.3.4&port=233&user=user&pass=pass&remarks=Example&group=xxx
     -   <https://t.me/http?server=1.2.3.4&port=233&user=user&pass=pass&remarks=Example&group=xxx>
 
-3.  目标类型为 `mixed` 时，会输出所有支持的节点的单链接组成的普通订阅（Base64编码）
+4.  目标类型为 `mixed` 时，会输出所有支持的节点的单链接组成的普通订阅（Base64编码）
 
-4.  目标类型为 `auto` 时，会根据请求的 `User-Agent` 自动判断输出的目标类型，匹配规则可参见 [此处](https://github.com/waevciuwecp/subconverter_dialer/blob/master/src/handler/interfaces.cpp#L121) （该链接有可能因为代码修改而不能准确指向相应的代码）。如果请求 `User-Agent` 命中 UA 防护关键词，则会在进入 `auto` 判断前直接返回伪 nginx 页面。
+5.  目标类型为 `auto` 时，会根据请求的 `User-Agent` 自动判断输出的目标类型，匹配规则可参见 [此处](https://github.com/waevciuwecp/subconverter_dialer/blob/master/src/handler/interfaces.cpp#L121) （该链接有可能因为代码修改而不能准确指向相应的代码）。如果请求 `User-Agent` 命中 UA 防护关键词，则会在进入 `auto` 判断前直接返回 `404 Not Found`。
 
 * * *
 
@@ -1083,7 +1087,7 @@ custom_proxy_group=dialer-lb`load-balance-use`(sub|dialer|relay)`http://www.gsta
 
 4.  **UA 防护关键词列表**
 
-    > 服务端会在路由处理前检查 `User-Agent`，命中关键词时返回伪 nginx 欢迎页（HTTP 200, `text/html`）
+    > 服务端会在路由处理前检查 `User-Agent`，命中关键词时直接返回 `404 Not Found`
     >
     > 关键词文件路径：`base/ua_block_keywords.list`
     >

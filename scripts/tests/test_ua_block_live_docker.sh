@@ -29,12 +29,12 @@ blocked_version_code="$(curl --noproxy '*' -sS -A "$blocked_ua" \
   -o "$blocked_version_body" \
   -w "%{http_code}")"
 
-if [[ "$blocked_version_code" != "200" ]]; then
-  echo "expected blocked /version to return HTTP 200, got ${blocked_version_code}" >&2
+if [[ "$blocked_version_code" != "404" ]]; then
+  echo "expected blocked /version to return HTTP 404, got ${blocked_version_code}" >&2
   exit 1
 fi
-if ! rg -n --fixed-strings "Welcome to nginx!" "$blocked_version_body" >/dev/null; then
-  echo "expected blocked /version response to be nginx decoy page" >&2
+if rg -n --fixed-strings "Welcome to nginx!" "$blocked_version_body" >/dev/null; then
+  echo "blocked /version response should not be nginx decoy page" >&2
   cat "$blocked_version_body" >&2 || true
   exit 1
 fi
@@ -46,12 +46,12 @@ blocked_digest_code="$(curl --noproxy '*' -sS -G -A "$blocked_ua" \
   -o "$blocked_digest_body" \
   -w "%{http_code}")"
 
-if [[ "$blocked_digest_code" != "200" ]]; then
-  echo "expected blocked /digest to return HTTP 200, got ${blocked_digest_code}" >&2
+if [[ "$blocked_digest_code" != "404" ]]; then
+  echo "expected blocked /digest to return HTTP 404, got ${blocked_digest_code}" >&2
   exit 1
 fi
-if ! rg -n --fixed-strings "Welcome to nginx!" "$blocked_digest_body" >/dev/null; then
-  echo "expected blocked /digest response to be nginx decoy page" >&2
+if rg -n --fixed-strings "Welcome to nginx!" "$blocked_digest_body" >/dev/null; then
+  echo "blocked /digest response should not be nginx decoy page" >&2
   cat "$blocked_digest_body" >&2 || true
   exit 1
 fi

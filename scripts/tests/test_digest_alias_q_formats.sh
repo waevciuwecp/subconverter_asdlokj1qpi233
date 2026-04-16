@@ -35,6 +35,7 @@ s#^quanx_rule_base=.*#quanx_rule_base=$rule_base#m; \
 s#^loon_rule_base=.*#loon_rule_base=$rule_base#m; \
 s#^sssub_rule_base=.*#sssub_rule_base=$rule_base#m; \
 s#^singbox_rule_base=.*#singbox_rule_base=$rule_base#m; \
+s#^block_private_address_requests=.*#block_private_address_requests=false#m; \
 s#^listen=.*#listen=127.0.0.1#m; \
 s#^port=.*#port=$port#m;" "$pref_path"
 
@@ -75,6 +76,10 @@ q_base64 = base64.urlsafe_b64encode(query.encode("utf-8")).decode("ascii").rstri
 q_deflate = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 q_compact = compact_query
 q_compact_deflate = base64.urlsafe_b64encode(raw_compact).decode("ascii").rstrip("=")
+nested_inner_query = "target=ss&url={}".format(urllib.parse.quote(source, safe=""))
+co3 = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
+raw_nested = co3.compress(nested_inner_query.encode("utf-8")) + co3.flush()
+nested_inner_q = base64.urlsafe_b64encode(raw_nested).decode("ascii").rstrip("=")
 
 def q(v):
     return "'" + v.replace("'", "'\"'\"'") + "'"
@@ -84,6 +89,7 @@ print("Q_BASE64=" + q(q_base64))
 print("Q_DEFLATE=" + q(q_deflate))
 print("Q_COMPACT=" + q(q_compact))
 print("Q_COMPACT_DEFLATE=" + q(q_compact_deflate))
+print("Q_NESTED_INNER=" + q(nested_inner_q))
 PY
 )"
 
@@ -126,6 +132,54 @@ check_digest_ok "deflate_q" "$Q_DEFLATE"
 check_digest_ok "compact_q" "$Q_COMPACT"
 check_digest_ok "compact_deflate_q" "$Q_COMPACT_DEFLATE"
 
+Q_NESTED_OUTER="$(
+PORT="$port" Q_INNER="$Q_NESTED_INNER" python3 - <<'PY'
+import base64
+import os
+import zlib
+
+port = os.environ["PORT"]
+inner_q = os.environ["Q_INNER"]
+outer_query = f"target=ss&url=http://127.0.0.1:{port}/digest?a=inner&q={inner_q}"
+co = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
+raw = co.compress(outer_query.encode("utf-8")) + co.flush()
+print(base64.urlsafe_b64encode(raw).decode("ascii").rstrip("="))
+PY
+)"
+
+nested_body="$tmp_dir/nested_digest_compact.body"
+nested_code="$(curl --noproxy '*' -sS -G "http://127.0.0.1:${port}/digest" \
+  --data-urlencode "q=${Q_NESTED_OUTER}" \
+  -o "$nested_body" \
+  -w "%{http_code}")"
+
+if [[ "$nested_code" != "200" ]]; then
+  echo "expected packed digest with raw nested '&q=' in u= to return HTTP 200, got ${nested_code}" >&2
+  cat "$tmp_dir/server.log" >&2 || true
+  cat "$nested_body" >&2 || true
+  exit 1
+fi
+
+if ! python3 - "$nested_body" <<'PY'
+import base64
+import pathlib
+import sys
+
+body = pathlib.Path(sys.argv[1]).read_text().strip()
+if "ss://" in body:
+    raise SystemExit(0)
+try:
+    decoded = base64.b64decode(body + "=" * ((4 - len(body) % 4) % 4)).decode("utf-8")
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if "ss://" in decoded else 1)
+PY
+then
+  echo "expected packed nested digest compatibility case to output ss node content (plain or base64)" >&2
+  cat "$nested_body" >&2 || true
+  exit 1
+fi
+
 bad_code="$(curl --noproxy '*' -sS -G "http://127.0.0.1:${port}/digest" \
   --data-urlencode "q=@@@@" \
   -o "$tmp_dir/bad.body" \
@@ -137,4 +191,4 @@ if [[ "$bad_code" != "400" ]]; then
   exit 1
 fi
 
-echo "PASS: digest alias precedence and q format compatibility are correct"
+echo "PASS: digest alias precedence, q formats, and nested digest url compatibility are correct"

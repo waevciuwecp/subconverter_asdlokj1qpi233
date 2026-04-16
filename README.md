@@ -83,7 +83,11 @@ Notice:
    `target=auto` maps by User-Agent and may still output node variants unsupported by your Shadowrocket version or server/client dialect.
    Practical fallback recommendation: if you must choose one for current Shadowrocket compatibility, keep `flow=xtls-rprx-vision` and use non-PQ encryption first; provide a separate PQ node with `flow=none` for optional use.
 
-2. You can add `&remark=` to Telegram-liked HTTP/Socks 5 links to set a remark for this node. For example:
+2. VLESS REALITY production-safe guide:
+   - English: [docs/vless-reality-production-safe.md](./docs/vless-reality-production-safe.md)
+   - Chinese: [docs/vless-reality-production-safe-cn.md](./docs/vless-reality-production-safe-cn.md)
+
+3. You can add `&remark=` to Telegram-liked HTTP/Socks 5 links to set a remark for this node. For example:
 
    - tg://http?server=1.2.3.4&port=233&user=user&pass=pass&remark=Example
 
@@ -208,7 +212,7 @@ Incoming HTTP requests are protected by a User-Agent blocker before route handli
 - Match rule: case-insensitive substring match, one keyword per line
 - File format: empty lines and lines starting with `#` are ignored
 - Reload behavior: keywords are reloaded automatically at runtime (no restart required)
-- Response on match: a fake nginx welcome page is returned (`200`, `text/html`)
+- Response on match: request is rejected with `404 Not Found`
 
 Default keywords include:
 - mobile brands (for example `huawei`, `xiaomi`, `oppo`, `vivo`, `zte`, `lenovo`)
