@@ -78,7 +78,9 @@ services:
 
 Notice:
 
-1. Shadowrocket users should use `ss`, `ssr` or `v2ray` as target.
+1. Shadowrocket users should prefer `ss`, `ssr` or `v2ray` as target.
+   `target=clash` is not fully compatible in Shadowrocket (especially for newer VLESS variants such as xhttp/httpupgrade/splithttp and post-quantum fields), and may import but fail at runtime.
+   `target=auto` may resolve to `mixed`, which can also include nodes unsupported by your Shadowrocket version or server/client dialect.
 
 2. You can add `&remark=` to Telegram-liked HTTP/Socks 5 links to set a remark for this node. For example:
 
