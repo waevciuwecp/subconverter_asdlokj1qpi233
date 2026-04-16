@@ -144,6 +144,7 @@
 1.  Shadowrocket 用户建议优先使用 `mixed` 参数，`target=clash` 在很多场景下也可兼容。  
     已知兼容性缺口：部分 VLESS 后量子节点在 Shadowrocket 中，`flow=xtls-rprx-vision` 可能失败，而相同加密在 `flow=none` 下可用。  
     `target=auto` 会按 User-Agent 自动映射，仍可能输出当前 Shadowrocket 版本或服务端方言不兼容的节点形态。
+    实际回退建议：当前若必须二选一，为提升 Shadowrocket 可用性优先保留 `flow=xtls-rprx-vision` 并先使用非 PQ 加密；同时可额外提供 `flow=none` 的 PQ 节点供可选使用。
 
 2.  类 TG 代理的 HTTP/Socks 链接由于没有命名设定，所以可以在后方插入`&remarks=`进行命名，同时也可以插入 `&group=` 设置组别名称，以上两个参数需要经过 [URLEncode](https://www.urlencoder.org/) 处理，例如
 
